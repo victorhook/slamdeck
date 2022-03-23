@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "preRun",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "OPENOCD_SCRIPTS": "/home/victor/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/share/openocd/scripts",
+                    "OPENOCD_BIN": "/home/victor/.espressif/tools/openocd-esp32/v0.11.0-esp32-20211220/openocd-esp32/bin/openocd"
+                }
+            },
+            "problemMatcher": [],
+            "command": "$OPENOCD_BIN -c \"set ESP_RTOS none\" -f board/esp32s3-builtin.cfg",
+            "isBackground": true
+        }
+    ]
+}
