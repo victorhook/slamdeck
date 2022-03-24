@@ -90,22 +90,29 @@ static uint8_t _vl53l5cx_poll_for_answer(
 	uint8_t timeout = 0;
 
 	do {
-		status |= RdMulti(&(p_dev->platform), address,
-				p_dev->temp_buffer, size);
-		status |= WaitMs(&(p_dev->platform), 10);
+		status |= RdMulti(&(p_dev->platform), address, p_dev->temp_buffer, size);
+		status |= WaitMs(&(p_dev->platform), 1000);
 
-		if(timeout >= (uint8_t)200)	/* 2s timeout */
-		{
-			status |= (uint8_t)VL53L5CX_STATUS_TIMEOUT_ERROR;
-		}else if((size >= (uint8_t)4)
-                         && (p_dev->temp_buffer[2] >= (uint8_t)0x7f))
-		{
-			status |= VL53L5CX_MCU_ERROR;
+		/*
+		printf("Mask: %02x, pos: %d, Poll address %02x: ", (p_dev->temp_buffer[pos] & mask), pos, address);
+		for (int i = 0; i < size; i++) {
+			printf("%02x ", p_dev->temp_buffer[i]);
 		}
-		else
+		printf("\n");
+		*/
+
+		if(timeout >= (uint8_t)200)	{ /* 2s timeout */
+			status |= (uint8_t)VL53L5CX_STATUS_TIMEOUT_ERROR;
+			ESP_LOGE(TAG, "VL53L5cx Timeout error");
+		}
+		else if((size >= (uint8_t)4) && (p_dev->temp_buffer[2] >= (uint8_t)0x7f)) {
+			status |= VL53L5CX_MCU_ERROR;
+			ESP_LOGE(TAG, "VL53L5cx MCU Error");
+		} else
 		{
 			timeout++;
 		}
+
 	}while ((p_dev->temp_buffer[pos] & mask) != expected_value);
 
 	return status;
@@ -204,9 +211,8 @@ static uint8_t _vl53l5cx_send_offset_data(
 	(void)memcpy(&(p_dev->temp_buffer[0x1E0]), footer, 8);
 	status |= WrMulti(&(p_dev->platform), 0x2e18, p_dev->temp_buffer,
 		VL53L5CX_OFFSET_BUFFER_SIZE);
-	status |=_vl53l5cx_poll_for_answer(p_dev, 4, 1,
-		VL53L5CX_UI_CMD_STATUS, 0xff, 0x03);
-
+	status |=_vl53l5cx_poll_for_answer(p_dev, 4, 1, VL53L5CX_UI_CMD_STATUS, 0xff, 0x03);
+	// status |=_vl53l5cx_poll_for_answer(p_dev, 4, 1, VL53L5CX_UI_CMD_STATUS, 0xff, 0x03);
 	return status;
 }
 
@@ -329,9 +335,7 @@ uint8_t vl53l5cx_init(
 
 	/* Wait for sensor booted (several ms required to get sensor ready ) */
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
-	ESP_LOGI(TAG, "1");
-	//status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x06, 0xff, 1);
-	ESP_LOGI(TAG, "2");
+	status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x06, 0xff, 1);
 
 	status |= WrByte(&(p_dev->platform), 0x000E, 0x01);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
@@ -372,6 +376,7 @@ uint8_t vl53l5cx_init(
 	status |= WrByte(&(p_dev->platform), 0x20, 0x06);
 
 	/* Download FW into VL53L5 */
+	ESP_LOGI(TAG, "Downloading firmware!");
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x09);
 	status |= WrMulti(&(p_dev->platform),0,
 		(uint8_t*)&VL53L5CX_FIRMWARE[0],0x8000);
@@ -382,17 +387,21 @@ uint8_t vl53l5cx_init(
 	status |= WrMulti(&(p_dev->platform),0,
 		(uint8_t*)&VL53L5CX_FIRMWARE[0x10000],0x5000);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x01);
+	ESP_LOGI(TAG, "Firmware downloaded");
 
 	/* Check if FW correctly downloaded */
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 	status |= WrByte(&(p_dev->platform), 0x03, 0x0D);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x01);
+	ESP_LOGI(TAG, "Checking firmware...");
 	status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x21, 0x10, 0x10);
+	ESP_LOGI(TAG, "Firmware correct!");
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
 	status += RdByte(&(p_dev->platform), 0x7fff, &tmp);
 	status |= WrByte(&(p_dev->platform), 0x0C, 0x01);
 
 	/* Reset MCU and wait boot */
+	ESP_LOGI(TAG, "Reseting MCU...");
 	status |= WrByte(&(p_dev->platform), 0x7FFF, 0x00);
 	status |= WrByte(&(p_dev->platform), 0x114, 0x00);
 	status |= WrByte(&(p_dev->platform), 0x115, 0x00);
@@ -405,21 +414,26 @@ uint8_t vl53l5cx_init(
 	status |= _vl53l5cx_poll_for_mcu_boot(p_dev);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 
+	ESP_LOGI(TAG, "Reset complete...");
+
 	/* Get offset NVM data and store them into the offset buffer */
-	status |= WrMulti(&(p_dev->platform), 0x2fd8,
-		(uint8_t*)VL53L5CX_GET_NVM_CMD, sizeof(VL53L5CX_GET_NVM_CMD));
-	status |= _vl53l5cx_poll_for_answer(p_dev, 4, 0,
-		VL53L5CX_UI_CMD_STATUS, 0xff, 2);
-	status |= RdMulti(&(p_dev->platform), VL53L5CX_UI_CMD_START,
-		p_dev->temp_buffer, VL53L5CX_NVM_DATA_SIZE);
-	(void)memcpy(p_dev->offset_data, p_dev->temp_buffer,
-		VL53L5CX_OFFSET_BUFFER_SIZE);
+	status |= WrMulti(&(p_dev->platform), 0x2fd8, (uint8_t*)VL53L5CX_GET_NVM_CMD, sizeof(VL53L5CX_GET_NVM_CMD));
+	status |= _vl53l5cx_poll_for_answer(p_dev, 4, 0, VL53L5CX_UI_CMD_STATUS, 0xff, 2);
+	status |= RdMulti(&(p_dev->platform), VL53L5CX_UI_CMD_START, p_dev->temp_buffer, VL53L5CX_NVM_DATA_SIZE);
+
+
+	(void)memcpy(p_dev->offset_data, p_dev->temp_buffer, VL53L5CX_OFFSET_BUFFER_SIZE);
+	ESP_LOGI(TAG, "Sending offset");
 	status |= _vl53l5cx_send_offset_data(p_dev, VL53L5CX_RESOLUTION_4X4);
+
+	ESP_LOGI(TAG, "NVM Complete...");
 
 	/* Set default Xtalk shape. Send Xtalk to sensor */
 	(void)memcpy(p_dev->xtalk_data, (uint8_t*)VL53L5CX_DEFAULT_XTALK,
 		VL53L5CX_XTALK_BUFFER_SIZE);
 	status |= _vl53l5cx_send_xtalk_data(p_dev, VL53L5CX_RESOLUTION_4X4);
+
+	ESP_LOGI(TAG, "Xtalk complete...");
 
 	/* Send default configuration to VL53L5CX firmware */
 	status |= WrMulti(&(p_dev->platform), 0x2c34,
@@ -440,6 +454,8 @@ uint8_t vl53l5cx_init(
 	status |= vl53l5cx_dci_write_data(p_dev, (uint8_t*)&single_range,
 			VL53L5CX_DCI_SINGLE_RANGE,
 			(uint16_t)sizeof(single_range));
+
+	ESP_LOGI(TAG, "Init done...");
 
 	return status;
 }

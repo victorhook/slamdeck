@@ -1,6 +1,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
+#include "esp_log.h"
+#include "esp_err.h"
 
 #include "slamdeck.h"
 #include "vl53l5cx.h"
@@ -14,34 +16,48 @@ typedef struct {
     VL53L5CX_Configuration device;
     VL53L5CX_ResultsData   result;
     gpio_num_t             enable_pin;
+    uint8_t                is_active;
+    uint8_t                number;
+    uint8_t                address;
 } vl53l5cx_t;
 
 vl53l5cx_t sensors[] = {
     {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_1
+        .enable_pin=SLAMDECK_GPIO_SENSOR_1,
+        .is_active=1,
+        .number=1
     },
     {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_2
+        .enable_pin=SLAMDECK_GPIO_SENSOR_2,
+        .number=2
     },
     {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_3
+        .enable_pin=SLAMDECK_GPIO_SENSOR_3,
+        .number=3
     },
     {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_4
+        .enable_pin=SLAMDECK_GPIO_SENSOR_4,
+        .number=4
     },
     {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_5
+        .enable_pin=SLAMDECK_GPIO_SENSOR_5,
+        .number=5
     }
 };
 
-static const total_sensors = sizeof(sensors) / sizeof(vl53l5cx_t);
-
+static const uint8_t total_sensors = sizeof(sensors) / sizeof(vl53l5cx_t);
+static const char* TAG = "VL53L5CX";
 
 static void vl53l5cx_task()
 {
 
 }
 
+
+static inline void set_sensor_pin(gpio_num_t pin, const int value)
+{
+    gpio_set_level(pin, value);
+}
 
 static inline void init_sensor_enable_pin(gpio_num_t sensor)
 {
@@ -59,21 +75,30 @@ static inline void disable_all_sensors()
 
 static void init_sensors_gpio()
 {
+    int error;
     for (size_t i = 0; i < total_sensors; i++) {
+        vl53l5cx_t sensor = sensors[i];
+        if (!sensor.is_active)
+            continue;
+
         // 1. Init enable pins (LPn)
-        init_sensor_enable_pin(sensors[i].enable_pin);
+        init_sensor_enable_pin(sensor.enable_pin);
+
+        // 2. Disable all sensors, except this one and change its i2c address.
         disable_all_sensors();
+        gpio_set_level(sensor.enable_pin, HIGH);
+
+        vl53l5cx_set_i2c_address(&sensor.device, sensor.address);
 
         // Initialize I2C.
-        
+        error = vl53l5cx_init(&sensor.device);
+        if (error) {
+            ESP_LOGI(TAG, "Error initializing sensor %d", sensor.number);
+        }
     }
 
 }
 
-static void set_i2c_address(vl53l5cx_t& sensor, const uint8_t new_address)
-{
-    vl53l5cx_set_i2c_address(&sensor.Dev, new_address);
-}
 
 void init_vl53l5cx()
 {

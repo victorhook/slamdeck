@@ -41,7 +41,7 @@ static void enable_sensor(gpio_num_t gpio)
 
 static void test()
 {
-	enable_sensor(SLAMDECK_GPIO_SENSOR_1);
+	enable_sensor(SLAMDECK_GPIO_SENSOR_4);
 
 	uint8_t 				status, loop, isAlive, isReady, i;
 
@@ -50,52 +50,9 @@ static void test()
 
 	// Wait for sensor to wake up.
 	vTaskDelay(200/portTICK_RATE_MS);
-	uint8_t buf[10];
-
-	uint8_t dev, rev;
-
-	uint8_t buff;
-	/*
-	for (int i = 0; i < 0xff; i++) {
-		RdByte(&Dev.platform, i, &buff);
-		ESP_LOGI(TAG, "%02x: %02x", i, buff);
-		WrByte(&Dev.platform, 0x7fff, 0x00);
-		RdByte(&Dev.platform, i, &buff);
-		ESP_LOGI(TAG, "%02x: %02x", i, buff);
-	}
-	*/
-
-	/*
-	while (1) {
-		WrByte(&Dev.platform, 0x7fff, 0x00);
-		RdByte(&Dev.platform, 0, &dev);
-		RdByte(&Dev.platform, 1, &rev);
-		WrByte(&Dev.platform, 0x7fff, 0x02);
-		//RdByte(&Dev.platform, 1, buf);
-		//ESP_LOGI(TAG, "Write: %s", esp_err_to_name(RdByte(&Dev.platform, 0, buf)));
-		//ESP_LOGI(TAG, "Write: %s", esp_err_to_name(RdMulti(&Dev.platform, 0, buf, 5)));
-		//ESP_LOGI(TAG, "Write: %s", esp_err_to_name(WrByte(&Dev.platform, 10, 1)));
-		//ESP_LOGI(TAG, "Write: %s", esp_err_to_name(WrMulti(&Dev.platform, 10, buf, 5)));
-
-		// 0xF0) && (revision_id == (uint8_t)0x02))
-		ESP_LOGI(TAG, "Dev: %02x, Rev: %02x", dev, rev);
-		vTaskDelay(200/portTICK_RATE_MS);
-	}
-	*/
-
-	/* (Optional) Check if there is a VL53L5CX sensor connected */
-	status = vl53l5cx_is_alive(&Dev, &isAlive);
-	if(!isAlive || status)
-	{
-		ESP_LOGE(TAG, "VL53L5CX not detected at requested address\n");
-		while (1) {
-			vTaskDelay(50/portTICK_RATE_MS);
-		}
-	}
-
-	ESP_LOGI(TAG, "Sensor found, initializing vl53l5cx...");
 
 	status = vl53l5cx_init(&Dev);
+
 	if(status)
 	{
 		ESP_LOGE(TAG, "VL53L5CX ULD Loading failed\n");
@@ -107,8 +64,6 @@ static void test()
 
 	ESP_LOGI(TAG, "VL53L5CX ULD ready ! (Version : %s)\n", VL53L5CX_API_REVISION);
 
-
-
 	status = vl53l5cx_start_ranging(&Dev);
 
 	while(1) {
@@ -116,22 +71,18 @@ static void test()
 
 		if(isReady) {
 			vl53l5cx_get_ranging_data(&Dev, &Results);
-
-			/* As the sensor is set in 4x4 mode by default, we have a total
-			 * of 16 zones to print. For this example, only the data of first zone are
-			 * print */
-			printf("Print data no : %3u\n", Dev.streamcount);
+			printf("-------------------------------------\n");
 			for(i = 0; i < 16; i++)
 			{
-				printf("Zone : %3d, Status : %3u, Distance : %4d mm\n",
-					i,
+				printf("Zone : %3d, %4d mm\n",
 					Results.target_status[VL53L5CX_NB_TARGET_PER_ZONE*i],
 					Results.distance_mm[VL53L5CX_NB_TARGET_PER_ZONE*i]);
 			}
-			printf("\n");
+			printf("\n-------------------------------------");
+			fflush(stdout);
 		}
 
-		WaitMs(&(Dev.platform), 50);
+		WaitMs(&(Dev.platform), 10);
 	}
 
 	status = vl53l5cx_stop_ranging(&Dev);

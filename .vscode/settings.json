@@ -41,5 +41,6 @@
         "*.ipp": "c",
         "chrono": "c",
         "algorithm": "c"
-    }
+    },
+    "cortex-debug.registerUseNaturalFormat": false
 }
