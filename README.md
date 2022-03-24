@@ -1,0 +1,2 @@
+# Slamdeck
+This repository contains the source code that is used for my bachelor's thesis. In this thesis I investigate the possibility of mounting multiple solid-state lidars on a single pcb, in order to cover a wider FoV. The design of the pcb is in a way that it will fit on a Crazyflie.
