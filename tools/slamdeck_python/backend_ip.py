@@ -45,4 +45,3 @@ class BackendSerial(Backend):
             return False
 
         return self._sock.recv(size)
-

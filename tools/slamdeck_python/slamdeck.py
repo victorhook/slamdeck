@@ -36,8 +36,10 @@ class SlamdeckCommand(IntEnum):
 class SlamdeckResponse(IntEnum):
     RESULT_OK = 0
 
-class SlamdeckStatus(IntEnum):
-    pass
+class VL53L5CX_Status(IntEnum):
+    SENSOR_FAILED      = 0
+    SENSOR_NOT_ENABLED = 1
+    SENSOR_OK          = 2
 
 class VL53L5CX_PowerMode(IntEnum):
     POWER_MODE_SLEEP  = 0
@@ -90,39 +92,31 @@ class Slamdeck(Subscriber):
 
     def __init__(self, backend_params: BackendParams) -> None:
         self._backend: Backend = BackendFactory.get_backend(backend_params)
-        self._sensors = self._initialize_sensors()
+        self._sensors = self._create_sensors()
 
-    def _initialize_sensors(self) -> t.Dict[str, Sensor]:
-        sensors = {
+    def get_initial_sensor_settings(self, sensor: Sensor) -> None:
+        self.get_sensor_status(sensor)
+        self.get_i2c_address(sensor)
+        self.get_integration_time_ms(sensor)
+        self.get_power_mode(sensor)
+        self.get_ranging_frequency_hz(sensor)
+        self.get_ranging_mode(sensor)
+        self.get_resolution(sensor)
+        self.get_sharpener_percent(sensor)
+        self.get_target_order(sensor)
+
+    def _create_sensors(self) -> t.Dict[str, Sensor]:
+        return {
             'main':  Sensor(id=1, name='main'),
             'front': Sensor(id=2, name='front'),
             'right': Sensor(id=3, name='right'),
             'back':  Sensor(id=4, name='back'),
             'left':  Sensor(id=5, name='left')
         }
-        for sensor in sensors.values():
-            sensor.subscribe(self, 'status')
-
-
-        # TODO: Fill all data fields
-        def _init_sensor(id: int, name: str) -> Sensor:
-            sensor = Sensor(id, name)
-            
-
-
-            self.get_sensor_status(sensor)
-            self.get_i2c_address
-            self.get_integration_time_ms
-            self.get_power_mode
-            self.get_ranging_frequency_hz
-            self.get_ranging_mode
-            self.get_resolution
-            self.get_sharpener_percent
-            self.get_target_order
 
     """ --- Commands --- """
     def get_sensor_status(self, sensor: Sensor) -> None:
-        def _on_complete(status: SlamdeckStatus):
+        def _on_complete(status: VL53L5CX_Status):
             sensor.status = status
         self._cmd_execute(SlamdeckCommand.GET_SENSOR_STATUS, sensor.id, _on_complete, 1)
 
@@ -160,8 +154,9 @@ class Slamdeck(Subscriber):
         self._cmd_execute(SlamdeckCommand.GET_RESOLUTION, sensor.id, _on_complete, 1)
 
     def set_resolution(self, sensor: Sensor, resolution: VL53L5CX_Resolution) -> None:
-        def _on_complete(resolution: uint8):
-            sensor.resolution = resolution
+        def _on_complete(response: SlamdeckResponse):
+            if response == response.RESULT_OK:
+                sensor.resolution = resolution
         self._cmd_execute(SlamdeckCommand.SET_RESOLUTION, sensor.id, _on_complete, 1, resolution)
 
     # -- Ranging -- #
@@ -171,8 +166,9 @@ class Slamdeck(Subscriber):
         self._cmd_execute(SlamdeckCommand.GET_RANGING_FREQUENCY_HZ, sensor.id, _on_complete, 1)
 
     def set_ranging_frequency_hz(self, sensor: Sensor, ranging_frequency_hz: uint8) -> None:
-        def _on_complete(ranging_frequency_hz: uint8):
-            sensor.ranging_frequency_hz = ranging_frequency_hz
+        def _on_complete(response: SlamdeckResponse):
+            if response == response.RESULT_OK:
+                sensor.ranging_frequency_hz = ranging_frequency_hz
         self._cmd_execute(SlamdeckCommand.SET_RANGING_FREQUENCY_HZ, sensor.id, _on_complete, 1, ranging_frequency_hz)
 
     # -- Integration time -- #
@@ -225,20 +221,11 @@ class Slamdeck(Subscriber):
             sensor.data = np.frombuffer(data, dtype=np.uint16)
         self._cmd_execute(SlamdeckCommand.GET_DATA_FROM_SENSOR, sensor.id, _on_complete, sensor.resolution)
 
+    def connect(self) -> None:
+        self._backend.start()
 
-    def _cmd_execute(self,
-                     type: SlamdeckCommand,
-                     sensor: Sensor,
-                     on_complete: callable = None,
-                     bytes_to_read: uint32 = 0,
-                     data: uint8 = b'0x00'
-            ) -> None:
-        if not self._backend.is_running():
-            logging.error('Slamdeck not connected yet, can\'t issue commands.')
-            return
-
-        cmd = struct.pack_into('BBB', type, sensor, data)
-        self._backend.write(cmd, bytes_to_read, on_complete)
+    def disconnect(self) -> None:
+        self._backend.stop()
 
     """ --- Callbacks --- """
     def add_cb_connecting(self, callback: Callback) -> None:
@@ -256,8 +243,16 @@ class Slamdeck(Subscriber):
     def add_cb_on_new_data(self, callback: Callback) -> None:
         self._backend.cb_on_new_data.add_callback(callback)
 
-    def connect(self) -> None:
-        self._backend.start()
+    def _cmd_execute(self,
+                     type: SlamdeckCommand,
+                     sensor: Sensor,
+                     on_complete: callable = None,
+                     bytes_to_read: uint32 = 0,
+                     data: uint8 = b'0x00'
+            ) -> None:
+        if not self._backend.is_running():
+            logging.error('Slamdeck not connected yet, can\'t issue commands.')
+            return
 
-    def disconnect(self) -> None:
-        self._backend.stop()
+        cmd = struct.pack_into('BBB', type, sensor, data)
+        self._backend.write(cmd, bytes_to_read, on_complete)
