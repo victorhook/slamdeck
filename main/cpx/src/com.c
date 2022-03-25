@@ -40,16 +40,13 @@
 
 #define ESP_WIFI_CTRL_QUEUE_LENGTH (2)
 #define ESP_WIFI_CTRL_QUEUE_SIZE (sizeof(esp_routable_packet_t))
-#define ESP_PM_QUEUE_LENGTH (2)
-#define ESP_PM_QUEUE_SIZE (sizeof(esp_routable_packet_t))
-#define ESP_APP_QUEUE_LENGTH (2)
-#define ESP_APP_QUEUE_SIZE (sizeof(esp_routable_packet_t))
+#define ESP_SYS_QUEUE_LENGTH (2)
+#define ESP_SYS_QUEUE_SIZE (sizeof(esp_routable_packet_t))
 #define ESP_TEST_QUEUE_LENGTH (2)
 #define ESP_TEST_QUEUE_SIZE (sizeof(esp_routable_packet_t))
 
 static xQueueHandle espWiFiCTRLQueue;
-static xQueueHandle espPMQueue;
-static xQueueHandle espAPPQueue;
+static xQueueHandle espSystemQueue;
 static xQueueHandle espTESTQueue;
 
 static esp_routable_packet_t rxp;
@@ -65,11 +62,14 @@ static void com_rx(void* _param) {
     ESP_LOGD("COM", "Received packet for 0x%02X", rxp.route.destination);
     ESP_LOG_BUFFER_HEX_LEVEL("COM", &rxp, 10, ESP_LOG_DEBUG);
     switch (rxp.route.function) {
-      case TEST:
+      case CPX_F_TEST:
         xQueueSend(espTESTQueue, &rxp, (TickType_t) portMAX_DELAY);
         break;
-      case WIFI_CTRL:
+      case CPX_F_WIFI_CTRL:
         xQueueSend(espWiFiCTRLQueue, &rxp, (TickType_t) portMAX_DELAY);
+        break; 
+      case CPX_F_SYSTEM:
+        xQueueSend(espSystemQueue, &rxp, (TickType_t) portMAX_DELAY);
         break;
       default:
         ESP_LOGW("COM", "Cannot handle 0x%02X", rxp.route.function);
@@ -79,13 +79,12 @@ static void com_rx(void* _param) {
 
 void com_init() {
   espWiFiCTRLQueue = xQueueCreate(ESP_WIFI_CTRL_QUEUE_LENGTH, ESP_WIFI_CTRL_QUEUE_SIZE);
-  espPMQueue = xQueueCreate(ESP_PM_QUEUE_LENGTH, ESP_PM_QUEUE_SIZE);
-  espAPPQueue = xQueueCreate(ESP_APP_QUEUE_LENGTH, ESP_APP_QUEUE_SIZE);
+  espSystemQueue = xQueueCreate(ESP_SYS_QUEUE_LENGTH, ESP_SYS_QUEUE_SIZE);
   espTESTQueue = xQueueCreate(ESP_TEST_QUEUE_LENGTH, ESP_TEST_QUEUE_SIZE);
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_RX_TASK);
-  xTaskCreate(com_rx, "COM RX", 10000, NULL, 1, NULL);
+  xTaskCreate(com_rx, "COM RX", 5000, NULL, 1, NULL);
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_RX_TASK,
                       pdTRUE, // Clear bits before returning
@@ -101,4 +100,8 @@ void com_receive_test_blocking(esp_routable_packet_t * packet) {
 
 void com_receive_wifi_ctrl_blocking(esp_routable_packet_t * packet) {
   xQueueReceive(espWiFiCTRLQueue, packet, portMAX_DELAY);
+}
+
+void com_receive_system_blocking(esp_routable_packet_t * packet) {
+  xQueueReceive(espSystemQueue, packet, (TickType_t) portMAX_DELAY);
 }

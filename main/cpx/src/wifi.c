@@ -55,7 +55,7 @@ static esp_routable_packet_t txp;
 static char ssid[MAX_SSID_SIZE];
 static char key[MAX_SSID_SIZE];
 
-//static const int WIFI_CONNECTED_BIT = BIT0;
+static const int WIFI_CONNECTED_BIT = BIT0;
 static const int WIFI_SOCKET_DISCONNECTED = BIT1;
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -78,17 +78,6 @@ static int sock = -1;
 /* Accepted WiFi connection */
 static int conn = -1;
 
-
-#define EXAMPLE_ESP_MAXIMUM_RETRY  10
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
-/* The event group allows multiple bits for each event, but we only care about two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-static int s_retry_num = 0;
-
 enum {
   WIFI_CTRL_SET_SSID                = 0x10,
   WIFI_CTRL_SET_KEY                 = 0x11,
@@ -100,7 +89,6 @@ enum {
 };
 
 /* WiFi event handler */
-/*
 static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t eventId, void* eventData)
 {
   if (eventBase == WIFI_EVENT) {
@@ -152,19 +140,15 @@ static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t 
           ESP_LOGI(TAG, "11b: %d, 11g: %d, 11n: %d, lr: %d",
             ap_info.phy_11b, ap_info.phy_11g, ap_info.phy_11n, ap_info.phy_lr);
 
-          txp.route.destination = GAP8;
-          txp.route.source = ESP32;
-          txp.route.function = WIFI_CTRL;
+          cpxInitRoute(CPX_T_ESP32, CPX_T_GAP8, CPX_F_WIFI_CTRL, &txp.route);
           txp.data[0] = WIFI_CTRL_STATUS_WIFI_CONNECTED;
           memcpy(&txp.data[1], &event->ip_info.ip.addr, sizeof(uint32_t));
-          txp.dataLength = 3 + sizeof(uint32_t);
-
-          ESP_LOGI(TAG, "0x%04X", (uint32_t) event->ip_info.ip.addr);
+          txp.dataLength = 1 + sizeof(uint32_t);
 
           // TODO: We should probably not block here...
           espAppSendToRouterBlocking(&txp);
 
-          txp.route.destination = STM32;
+          txp.route.destination = CPX_T_STM32;
           espAppSendToRouterBlocking(&txp);
 
           xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
@@ -176,36 +160,13 @@ static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t 
     }
   }
 }
-*/
-
-static void event_handler(void* arg, esp_event_base_t event_base,
-                                int32_t event_id, void* event_data)
-{
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        } else {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        ESP_LOGI(TAG,"connect to the AP fail");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-	ESP_LOGI(TAG, "event: %d\n", event_id);
-}
-
-
 
 /* Initialize WiFi as AP */
 static void wifi_init_softap(const char *ssid, const char* key)
 {
+  esp_netif_t* ap_netif = esp_netif_create_default_wifi_ap();
+  assert(ap_netif);
+
   wifi_config_t wifi_config = {
       .ap = {
           .ssid_len = strlen(ssid),
@@ -228,6 +189,9 @@ static void wifi_init_softap(const char *ssid, const char* key)
 
 static void wifi_init_sta(const char * ssid, const char * key)
 {
+  esp_netif_t* sta_netif = esp_netif_create_default_wifi_sta();
+  assert(sta_netif);
+
   wifi_config_t wifi_config;
   memset((void *)&wifi_config, 0, sizeof(wifi_config_t));
   strncpy((char *)wifi_config.sta.ssid, ssid, strlen(ssid));
@@ -241,6 +205,7 @@ static void wifi_init_sta(const char * ssid, const char * key)
   ESP_ERROR_CHECK(esp_wifi_start() );
 
   ESP_LOGI(TAG, "wifi_init_sta finished.");
+
 }
 
 static void wifi_ctrl(void* _param) {
@@ -250,14 +215,14 @@ static void wifi_ctrl(void* _param) {
 
     switch (rxp.data[0]) {
       case WIFI_CTRL_SET_SSID:
-        ESP_LOGI("WIFI", "Should set SSID");
+        ESP_LOGD("WIFI", "Should set SSID");
         memcpy(ssid, &rxp.data[1], rxp.dataLength - 1);
         ssid[rxp.dataLength - 1 + 1] = 0;
         ESP_LOGD(TAG, "SSID: %s", ssid);
         // Save to NVS?
         break;
       case WIFI_CTRL_SET_KEY:
-        ESP_LOGI("WIFI", "Should set password");
+        ESP_LOGD("WIFI", "Should set password");
         memcpy(key, &rxp.data[1], rxp.dataLength - 1);
         key[rxp.dataLength - 1 + 1] = 0;
         ESP_LOGD(TAG, "KEY: %s", key);
@@ -265,11 +230,17 @@ static void wifi_ctrl(void* _param) {
         break;
       case WIFI_CTRL_WIFI_CONNECT:
         ESP_LOGD("WIFI", "Should connect");
-        if (rxp.data[1] == 0) {
-          wifi_init_sta(ssid, key);
+
+        if (strlen(ssid) > 0) {
+          if (rxp.data[1] == 0) {
+            wifi_init_sta(ssid, key);
+          } else {
+            wifi_init_softap(ssid, key);
+          }          
         } else {
-          wifi_init_softap(ssid, key);
+          ESP_LOGW(TAG, "No SSID set, cannot start wifi");
         }
+
         break;
     }
   }
@@ -290,19 +261,19 @@ void wifi_bind_socket() {
   if (sock < 0) {
     ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
   }
-  ESP_LOGI(TAG, "Socket created");
+  ESP_LOGD(TAG, "Socket created");
 
   int err = bind(sock, (struct sockaddr *)&destAddr, sizeof(destAddr));
   if (err != 0) {
     ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
   }
-  ESP_LOGI(TAG, "Socket binded");
+  ESP_LOGD(TAG, "Socket binded");
 
   err = listen(sock, 1);
   if (err != 0) {
     ESP_LOGE(TAG, "Error occured during listen: errno %d", errno);
   }
-  ESP_LOGI(TAG, "Socket listening");
+  ESP_LOGD(TAG, "Socket listening");
 }
 
 void wifi_wait_for_socket_connected() {
@@ -347,15 +318,13 @@ static void wifi_task(void *pvParameters) {
     //blink_period_ms = 100;
 
     // Not thread safe!
-    txp.route.source = ESP32;
-    txp.route.destination = GAP8;
-    txp.route.function = WIFI_CTRL;
+    cpxInitRoute(CPX_T_ESP32, CPX_T_GAP8, CPX_F_WIFI_CTRL, &txp.route);
     txp.data[0] = WIFI_CTRL_STATUS_CLIENT_CONNECTED;
     txp.data[1] = 1;    // connected
-    txp.dataLength = 4;
+    txp.dataLength = 2;
     espAppSendToRouterBlocking(&txp);
 
-    txp.route.destination = STM32;
+    txp.route.destination = CPX_T_STM32;
     espAppSendToRouterBlocking(&txp);
 
     // Probably not the best, should be handled in some other way?
@@ -363,15 +332,13 @@ static void wifi_task(void *pvParameters) {
     ESP_LOGI(TAG, "Client disconnected");
 
     // Not thread safe!
-    txp.route.source = ESP32;
-    txp.route.destination = GAP8;
-    txp.route.function = WIFI_CTRL;
+    cpxInitRoute(CPX_T_ESP32, CPX_T_GAP8, CPX_F_WIFI_CTRL, &txp.route);
     txp.data[0] = WIFI_CTRL_STATUS_CLIENT_CONNECTED;
     txp.data[1] = 0;    // disconnected
-    txp.dataLength = 4;
+    txp.dataLength = 2;
     espAppSendToRouterBlocking(&txp);
 
-    txp.route.destination = STM32;
+    txp.route.destination = CPX_T_STM32;
     espAppSendToRouterBlocking(&txp);
   }
 }
@@ -396,11 +363,9 @@ static void wifi_sending_task(void *pvParameters) {
   while (1) {
     xQueueReceive(wifiTxQueue, &qPacket, portMAX_DELAY);
 
-    txp_wifi.payloadLength = qPacket.dataLength + WIFI_TRANSPORT_MTU;
+    txp_wifi.payloadLength = qPacket.dataLength + CPX_ROUTING_PACKED_SIZE;
 
-    txp_wifi.routablePayload.route.source = qPacket.route.source;
-    txp_wifi.routablePayload.route.destination = qPacket.route.destination;
-    txp_wifi.routablePayload.route.function = qPacket.route.function;
+    cpxRouteToPacked(&qPacket.route, &txp_wifi.routablePayload.route);
 
     memcpy(txp_wifi.routablePayload.data, qPacket.data, qPacket.dataLength);
 
@@ -416,15 +381,19 @@ static void wifi_receiving_task(void *pvParameters) {
   while (1) {
     len = recv(conn, &rxp_wifi, 2, 0);
     if (len > 0) {
-      ESP_LOGI(TAG, "Wire data length %i", rxp_wifi.payloadLength);
+      ESP_LOGD(TAG, "Wire data length %i", rxp_wifi.payloadLength);
       int totalRxLen = 0;
       do {
         len = recv(conn, &rxp_wifi.payload[totalRxLen], rxp_wifi.payloadLength - totalRxLen, 0);
-        ESP_LOGI(TAG, "Read %i bytes", len);
+        ESP_LOGD(TAG, "Read %i bytes", len);
         totalRxLen += len;
       } while (totalRxLen < rxp_wifi.payloadLength);
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp_wifi, 10, ESP_LOG_DEBUG);
       xQueueSend(wifiRxQueue, &rxp_wifi, portMAX_DELAY);
+    } else if (len == 0) {
+      //vTaskDelay(10);
+      xEventGroupSetBits(s_wifi_event_group, WIFI_SOCKET_DISCONNECTED);
+      //printf("No data!\n");
     } else {
       vTaskDelay(10);
     }
@@ -443,155 +412,14 @@ void wifi_transport_receive(CPXRoutablePacket_t* packet) {
 
   packet->dataLength = qPacket.payloadLength - CPX_ROUTING_PACKED_SIZE;
 
-  packet->route.source = qPacket.routablePayload.route.source;
-  packet->route.destination = qPacket.routablePayload.route.destination;
-  packet->route.function = qPacket.routablePayload.route.function;
+  cpxPackedToRoute(&qPacket.routablePayload.route, &packet->route);
 
   memcpy(packet->data, qPacket.routablePayload.data, packet->dataLength);
 }
 
-const char* SSID = "Bitcraze_guest";
-const char* SSID_KEY = "AwesomenessInProgress";
-
-
-static void do_retransmit(const int sock)
-{
-    int len;
-    char rx_buffer[128];
-
-    do {
-        len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-        if (len < 0) {
-            ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
-        } else if (len == 0) {
-            ESP_LOGW(TAG, "Connection closed");
-        } else {
-            rx_buffer[len] = 0; // Null-terminate whatever is received and treat it like a string
-            ESP_LOGI(TAG, "Received %d bytes: %s", len, rx_buffer);
-
-            // send() can return less bytes than supplied length.
-            // Walk-around for robust implementation.
-            int to_write = len;
-            while (to_write > 0) {
-                int written = send(sock, rx_buffer + (len - to_write), to_write, 0);
-                if (written < 0) {
-                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                }
-                to_write -= written;
-            }
-        }
-    } while (len > 0);
-}
-
-void my_server_task()
-{
-	ESP_LOGI(TAG, "server starting to listen!\n");
-    int keepAlive = 1;
-    //int keepIdle = KEEPALIVE_IDLE;
-    //int keepInterval = KEEPALIVE_INTERVAL;
-    //int keepCount = KEEPALIVE_COUNT;
-
-	char addr_str[128];
-
-	while (1) {
-		struct sockaddr_storage source_addr;
-		socklen_t addr_len = sizeof(source_addr);
-		int newSock = accept(sock, (struct sockaddr *)&source_addr, &addr_len);
-		if (newSock < 0) {
-			ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
-			break;
-		}
-
-		// Set tcp keepalive option
-        setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
-        //setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
-        //setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
-        //setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
-        // Convert ip address to string
-
-
-        if (source_addr.ss_family == PF_INET) {
-            inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
-        }
-		ESP_LOGI(TAG, "Socket accepted ip address: %s", addr_str);
-
-        do_retransmit(newSock);
-
-
-        shutdown(newSock, 0);
-        close(newSock);
-
-		vTaskDelay(20 / portTICK_PERIOD_MS);
-	}
-}
-
-
 void wifi_init() {
-  s_wifi_event_group = xEventGroupCreate();
+  esp_netif_init();
 
-  ESP_ERROR_CHECK(esp_netif_init());
-  esp_netif_create_default_wifi_sta();
-
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-  esp_event_handler_instance_t instance_any_id;
-  esp_event_handler_instance_t instance_got_ip;
-  ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                      ESP_EVENT_ANY_ID,
-                                                      &event_handler,
-                                                      NULL,
-                                                      &instance_any_id));
-  ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                      IP_EVENT_STA_GOT_IP,
-                                                      &event_handler,
-                                                      NULL,
-                                                      &instance_got_ip));
-
-
-    wifi_config_t wifi_config;
-	memset((void *)&wifi_config, 0, sizeof(wifi_config_t));
-	strncpy((char *)wifi_config.sta.ssid, SSID, strlen(SSID));
-	strncpy((char *)wifi_config.sta.password, SSID_KEY, strlen(SSID_KEY));
-	wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-	wifi_config.sta.pmf_cfg.capable = true;
-	wifi_config.sta.pmf_cfg.required = true;
-
-	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-	ESP_ERROR_CHECK(esp_wifi_start() );
-
-  	ESP_LOGI(TAG, "wifi_init_sta finished.");
-	ESP_LOGI(TAG, "connecting to ap SSID:%s password:%s", SSID, SSID_KEY);
-
-      /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT) {
-      ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", SSID, SSID_KEY);
-      wifi_bind_socket();
-      //esp_event_handler_instance_register(IP_EVENT, IP_EVENT_)
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", SSID, SSID_KEY);
-    } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-
-    /* The event will not be processed after unregister */
-    //ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    //ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-    //vEventGroupDelete(s_wifi_event_group);
-
-    xTaskCreate(my_server_task, "MyServer", 10000, NULL, 1, NULL);
-
-  /*
   s_wifi_event_group = xEventGroupCreate();
 
   wifiRxQueue = xQueueCreate(WIFI_HOST_QUEUE_LENGTH, sizeof(WifiTransportPacket_t));
@@ -599,9 +427,9 @@ void wifi_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK | START_UP_CTRL_TASK);
-  xTaskCreate(wifi_task, "WiFi TASK", 10000, NULL, 1, NULL);
-  xTaskCreate(wifi_sending_task, "WiFi TX", 10000, NULL, 1, NULL);
-  xTaskCreate(wifi_receiving_task, "WiFi RX", 10000, NULL, 1, NULL);
+  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 1, NULL);
+  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 1, NULL);
+  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 1, NULL);
   ESP_LOGI(TAG, "Waiting for main, RX and TX tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK,
@@ -609,7 +437,7 @@ void wifi_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  xTaskCreate(wifi_ctrl, "WiFi CTRL", 10000, NULL, 1, NULL);
+  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 1, NULL);
   ESP_LOGI(TAG, "Waiting for CTRL task to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_CTRL_TASK,
@@ -618,5 +446,4 @@ void wifi_init() {
                       portMAX_DELAY);
 
   ESP_LOGI("WIFI", "Wifi initialized");
-  */
 }

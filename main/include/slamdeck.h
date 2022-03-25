@@ -34,3 +34,7 @@
 #define SLAMDECK_I2C_BUS_CF         I2C_NUM_1
 #define SLAMDECK_I2C_MASTER_FREQ_HZ 400000
 #define SLAMDECK_I2C_ADDRESS_CF      0x99
+
+
+/* --- Functions --- */
+uint8_t slamdeck_init();

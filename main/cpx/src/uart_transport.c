@@ -39,7 +39,30 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 
-#define UART_BUFFER_LEN (UART_TRANSPORT_MTU + 2)
+
+
+// Length of start + payloadLength
+#define UART_HEADER_LENGTH 2
+#define UART_CRC_LENGTH 1
+#define UART_META_LENGTH (UART_HEADER_LENGTH + UART_CRC_LENGTH)
+
+typedef struct {
+    CPXRoutingPacked_t route;
+    uint8_t data[UART_TRANSPORT_MTU - CPX_ROUTING_PACKED_SIZE];
+} __attribute__((packed)) uartTransportPayload_t;
+
+typedef struct {
+    uint8_t start;
+    uint8_t payloadLength; // Excluding start and crc
+    union {
+        uartTransportPayload_t routablePayload;
+        uint8_t payload[UART_TRANSPORT_MTU];
+    };
+
+    uint8_t crcPlaceHolder; // Not actual position. CRC is added after the last byte of payload
+} __attribute__((packed)) uart_transport_packet_t;
+
+
 
 #define TX_QUEUE_LENGTH 10
 #define RX_QUEUE_LENGTH 10
@@ -68,6 +91,17 @@ static EventGroupHandle_t startUpEventGroup;
 #define START_UP_RX_RUNNING (1<<0)
 #define START_UP_TX_RUNNING (1<<1)
 
+static uint8_t calcCrc(const uart_transport_packet_t* packet) {
+  const uint8_t* start = (const uint8_t*) packet;
+  const uint8_t* end = &packet->payload[packet->payloadLength];
+
+  uint8_t crc = 0;
+  for (const uint8_t* p = start; p < end; p++) {
+    crc ^= *p;
+  }
+
+  return crc;
+}
 
 static void uart_tx_task(void* _param) {
   uint8_t ctr[] = {0xFF, 0x00};
@@ -101,14 +135,11 @@ static void uart_tx_task(void* _param) {
     if (uxQueueMessagesWaiting(tx_queue) > 0) {
       // Dequeue and wait for either CTS or CTR
       xQueueReceive(tx_queue, &qPacket, 0);
-
+      txp.start = 0xFF;
       txp.payloadLength = qPacket.dataLength + CPX_ROUTING_PACKED_SIZE;
-
-      txp.routablePayload.route.source = qPacket.route.source;
-      txp.routablePayload.route.destination = qPacket.route.destination;
-      txp.routablePayload.route.function = qPacket.route.function;
-
+      cpxRouteToPacked(&qPacket.route, &txp.routablePayload.route);
       memcpy(txp.routablePayload.data, qPacket.data, txp.payloadLength);
+      txp.payload[txp.payloadLength] = calcCrc(&txp);
 
       do {
         ESP_LOGD("UART", "Waiting for CTR/CTS");
@@ -123,8 +154,7 @@ static void uart_tx_task(void* _param) {
         }
       } while ((evBits & CTS_EVENT) != CTS_EVENT);
       ESP_LOGD("UART", "Sending packet");
-      txp.start = 0xFF;
-      uart_write_bytes(UART_NUM_0, &txp, txp.payloadLength + 2);
+      uart_write_bytes(UART_NUM_0, &txp, txp.payloadLength + UART_META_LENGTH);
     }
   }
 }
@@ -144,7 +174,9 @@ static void uart_rx_task(void* _param) {
       ESP_LOGD("UART", "Received CTS");
       xEventGroupSetBits(evGroup, CTS_EVENT);
     } else {
-      uart_read_bytes(UART_NUM_0, rxp.payload, rxp.payloadLength, portMAX_DELAY);
+      uart_read_bytes(UART_NUM_0, rxp.payload, rxp.payloadLength + UART_CRC_LENGTH, portMAX_DELAY);
+      assert (rxp.payload[rxp.payloadLength] == calcCrc(&rxp));
+
       ESP_LOGD("UART", "Received packet");
       // Post on RX queue and send flow control
       // Optimize a bit here
@@ -182,7 +214,7 @@ void uart_transport_init() {
     // Launching communication tasks
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_RX_RUNNING | START_UP_TX_RUNNING);
-    xTaskCreate(uart_rx_task, "UART RX transport", 10000, NULL, 1, NULL);
+    xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 1, NULL);
     ESP_LOGI("UART", "Waiting for RX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_RX_RUNNING,
@@ -195,7 +227,7 @@ void uart_transport_init() {
     // CTR and miss CTS (which means that the STM32 will stop sending CTS
     // too early and we cannot sync)
 
-    xTaskCreate(uart_tx_task, "UART TX transport", 10000, NULL, 1, NULL);
+    xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 1, NULL);
     ESP_LOGI("UART", "Waiting for TX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_TX_RUNNING,
@@ -210,6 +242,8 @@ void uart_transport_send(const CPXRoutablePacket_t* packet) {
   assert(packet->dataLength <= UART_TRANSPORT_MTU - CPX_ROUTING_PACKED_SIZE);
 
   xQueueSend(tx_queue, packet, portMAX_DELAY);
+
+  xEventGroupSetBits(evGroup, TXQ_EVENT);
 }
 
 void uart_transport_receive(CPXRoutablePacket_t* packet) {
@@ -220,9 +254,7 @@ void uart_transport_receive(CPXRoutablePacket_t* packet) {
 
   packet->dataLength = rxp.payloadLength - CPX_ROUTING_PACKED_SIZE;
 
-  packet->route.source = rxp.routablePayload.route.source;
-  packet->route.destination = rxp.routablePayload.route.destination;
-  packet->route.function = rxp.routablePayload.route.function;
+  cpxPackedToRoute(&rxp.routablePayload.route, &packet->route);
 
   memcpy(packet->data, rxp.routablePayload.data, packet->dataLength);
 }
