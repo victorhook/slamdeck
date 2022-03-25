@@ -4,103 +4,189 @@
 #include "esp_log.h"
 #include "esp_err.h"
 
-#include "slamdeck.h"
 #include "vl53l5cx.h"
 #include "vl53l5cx_api.h"
+#include "platform.h"
+
 
 #define LOW  0
 #define HIGH 1
 
+#define VL53L5CX_DEFAULT_I2C_ADDRESS 0x29
+#define update_status(sensor, status_bit, value) ( sensor->status |= ((1 << status_bit) & value ? 0xff : 0) )
+#define clear_status(sensor) (sensor->status = 0)
+#define read_status(sensor, status_bit) ( sensor->status & (1 << status_bit) )
 
-typedef struct {
-    VL53L5CX_Configuration device;
-    VL53L5CX_ResultsData   result;
-    gpio_num_t             enable_pin;
-    uint8_t                is_active;
-    uint8_t                number;
-    uint8_t                address;
-} vl53l5cx_t;
-
-vl53l5cx_t sensors[] = {
-    {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_1,
-        .is_active=1,
-        .number=1
-    },
-    {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_2,
-        .number=2
-    },
-    {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_3,
-        .number=3
-    },
-    {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_4,
-        .number=4
-    },
-    {
-        .enable_pin=SLAMDECK_GPIO_SENSOR_5,
-        .number=5
-    }
-};
-
-static const uint8_t total_sensors = sizeof(sensors) / sizeof(vl53l5cx_t);
 static const char* TAG = "VL53L5CX";
 
-static void vl53l5cx_task()
+typedef struct {
+    VL53L5CX_id_e           id;
+    gpio_num_t              enable_pin;
+    uint32_t                integration_time_ms;
+    uint8_t                 sharpener_percent;
+    uint8_t                 ranging_frequency_hz;
+    VL53L5CX_status_e       status;
+    VL53L5CX_resolution_e   resolution;
+    VL53L5CX_power_mode_e   power_mode;
+    VL53L5CX_target_order_e target_order;
+    VL53L5CX_ranging_mode_e ranging_mode;
+
+    // ST's driver types
+    VL53L5CX_Configuration  config;
+    VL53L5CX_ResultsData    result;
+} VL53L5CX_t;
+
+static VL53L5CX_t sensors[5];
+// Sensor id starts at 1, so we need this to index correctly.
+
+static inline VL53L5CX_t* get_sensor(VL53L5CX_id_e sensor)
+{
+    return &sensors[( (uint8_t) sensor-1 )];
+}
+
+// Bit mask to for temporarily disabling sensors.
+static uint8_t tmp_disabled_sensors;
+
+
+static void VL53L5CX_task()
 {
 
 }
-
 
 static inline void set_sensor_pin(gpio_num_t pin, const int value)
 {
-    gpio_set_level(pin, value);
+    ESP_LOGD(TAG, "Setting pin %d to %d", pin, value);
+    ESP_ERROR_CHECK(gpio_set_level(pin, value));
 }
 
-static inline void init_sensor_enable_pin(gpio_num_t sensor)
+static inline void init_sensor_gpio_enable_pin(VL53L5CX_id_e sensor)
 {
-	ESP_ERROR_CHECK(gpio_reset_pin(sensor));
-	ESP_ERROR_CHECK(gpio_set_direction(sensor, GPIO_MODE_OUTPUT));
-    ESP_ERROR_CHECK(gpio_set_direction(sensor, LOW));
+    gpio_num_t pin = get_sensor(sensor)->enable_pin;
+	ESP_ERROR_CHECK(gpio_reset_pin(pin));
+	ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(gpio_set_level(pin, LOW));
+}
+
+static inline void set_sensor_enable(VL53L5CX_id_e sensor, const uint8_t value)
+{
+    set_sensor_pin(get_sensor(sensor)->enable_pin, value);
+    update_status(get_sensor(sensor), SENSOR_STATUS_ENABLED, value);
+}
+
+static inline void enable_sensor(VL53L5CX_id_e sensor)
+{
+    set_sensor_enable(sensor, 1);
+}
+
+static inline void disable_sensor(VL53L5CX_id_e sensor)
+{
+    set_sensor_enable(sensor, 0);
 }
 
 static inline void disable_all_sensors()
 {
-    for (size_t i = 0; i < total_sensors; i++)
-        ESP_ERROR_CHECK(gpio_set_direction(sensors[i].enable_pin, LOW));
+    tmp_disabled_sensors = 0;
+    for (VL53L5CX_id_e sensor = 1; sensor <= 5; sensor++) {
+        if (read_status(get_sensor(sensor), SENSOR_STATUS_ENABLED))
+            tmp_disabled_sensors |= (1 << sensor);
+        disable_sensor(sensor);
+    }
 }
 
-
-static void init_sensors_gpio()
+static inline void restore_enabled_sensors()
 {
-    int error;
-    for (size_t i = 0; i < total_sensors; i++) {
-        vl53l5cx_t sensor = sensors[i];
-        if (!sensor.is_active)
-            continue;
+    for (VL53L5CX_id_e sensor = 1; sensor <= 5; sensor++) {
+        if (tmp_disabled_sensors |= (1 << sensor))
+            enable_sensor(sensor);
+    }
+}
 
-        // 1. Init enable pins (LPn)
-        init_sensor_enable_pin(sensor.enable_pin);
+uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
+{
+    VL53L5CX_t* this_sensor = get_sensor(sensor);
+    this_sensor->id = sensor;
+    this_sensor->enable_pin = enable_pin;
+    this_sensor->config.platform.address = VL53L5CX_DEFAULT_I2C_ADDRESS;
 
-        // 2. Disable all sensors, except this one and change its i2c address.
-        disable_all_sensors();
-        gpio_set_level(sensor.enable_pin, HIGH);
+    // Clear status flag
+    clear_status(this_sensor);
+    VL53L5CX_result_e result;
 
-        vl53l5cx_set_i2c_address(&sensor.device, sensor.address);
+    // Enable GPIO for pin
+    init_sensor_gpio_enable_pin(sensor);
+    ESP_LOGD(TAG, "Initializing, sensor id: %d, enable pin: %d", this_sensor->id, this_sensor->enable_pin);
 
-        // Initialize I2C.
-        error = vl53l5cx_init(&sensor.device);
-        if (error) {
-            ESP_LOGI(TAG, "Error initializing sensor %d", sensor.number);
-        }
+    // Set i2c address.
+    //disable_all_sensors();
+    enable_sensor(sensor);
+    //VL53L5CX_set_i2c_address(sensor, this_sensor.platform.address);
+    //restore_enabled_sensors();
+
+    // 2. Initialize the sensor.
+    update_status(this_sensor, SENSOR_STATUS_INITIALIZING, 1);
+    result = vl53l5cx_init(&this_sensor->config);
+    update_status(this_sensor, SENSOR_STATUS_INITIALIZING, 0);
+
+    if (result != RESULT_OK) {
+        ESP_LOGE(TAG, "Initialization failed");
+        update_status(this_sensor, SENSOR_STATUS_FAILED, 1);
+        return RESULT_FAIL;
     }
 
+    ESP_LOGD(TAG, "Initialization complete");
+    update_status(this_sensor, SENSOR_STATUS_INITIALIZED, 1);
+
+    return RESULT_OK;
+
+    // 3. Get all parameters for the sensor.
+    vl53l5cx_get_power_mode(&this_sensor->config, (uint8_t*) &this_sensor->power_mode);
+    vl53l5cx_get_resolution(&this_sensor->config, (uint8_t*) &this_sensor->resolution);
+    vl53l5cx_get_ranging_frequency_hz(&this_sensor->config, &this_sensor->ranging_frequency_hz);
+    vl53l5cx_get_integration_time_ms(&this_sensor->config, &this_sensor->integration_time_ms);
+    vl53l5cx_get_sharpener_percent(&this_sensor->config, &this_sensor->sharpener_percent);
+    vl53l5cx_get_target_order(&this_sensor->config, (uint8_t*) &this_sensor->target_order);
+    vl53l5cx_get_ranging_mode(&this_sensor->config, (uint8_t*) &this_sensor->ranging_mode);
+
+    update_status(this_sensor, SENSOR_STATUS_INITIALIZED, 1);
+    return RESULT_OK;
 }
 
-
-void init_vl53l5cx()
+/* --- VL53L5CX API --- */
+uint8_t VL53L5CX_set_enable(VL53L5CX_id_e sensor, const uint8_t is_enabled)
 {
-    xTaskCreate(vl53l5cx_task, "VL53L5CX", 2048, NULL, 5, NULL);
+    set_sensor_pin(get_sensor(sensor)->enable_pin, is_enabled);
+    update_status(get_sensor(sensor), SENSOR_STATUS_ENABLED, is_enabled);
+    return 0;
+}
+uint8_t VL53L5CX_set_i2c_address(VL53L5CX_id_e sensor, const uint8_t address)
+{
+    return vl53l5cx_set_i2c_address(&get_sensor(sensor)->config, address);
+}
+uint8_t VL53L5CX_set_power_mode(VL53L5CX_id_e sensor, const VL53L5CX_power_mode_e power_mode)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_resolution(VL53L5CX_id_e sensor, const VL53L5CX_resolution_e resolution)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_ranging_frequency_hz(VL53L5CX_id_e sensor, const uint8_t frequency_hz)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_integration_time_ms(VL53L5CX_id_e sensor, const uint32_t integration_time_ms)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_sharpener_percent(VL53L5CX_id_e sensor, const uint8_t sharpener)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_target_order(VL53L5CX_id_e sensor, const VL53L5CX_target_order_e target_order)
+{
+    return 0;
+}
+uint8_t VL53L5CX_set_ranging_mode(VL53L5CX_id_e sensor, const VL53L5CX_ranging_mode_e ranging_mode)
+{
+    return 0;
 }

@@ -27,6 +27,8 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "i2c.h"
+#include "esp_task_wdt.h"
+
 
 static const char* TAG = "VL53L5CX Test";
 static VL53L5CX_Configuration 	Dev;			/* Sensor configuration */
@@ -50,7 +52,6 @@ static void test()
 
 	// Wait for sensor to wake up.
 	vTaskDelay(200/portTICK_RATE_MS);
-
 	status = vl53l5cx_init(&Dev);
 
 	if(status)
@@ -93,5 +94,5 @@ static void test()
 void test_vl53l5cx()
 {
 	ESP_LOGI(TAG, "Initialized");
-	xTaskCreate(test, TAG, 4096, NULL, 5, NULL);
+	xTaskCreate(test, TAG, 8192, NULL, 5, NULL);
 }

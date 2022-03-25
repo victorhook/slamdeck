@@ -71,7 +71,7 @@
 #include "esp_err.h"
 #include "stdio.h"
 
-static const char* TAG = "vl api";
+static const char* TAG = "VL53L5CX Api";
 
 /**
  * @brief Inner function, not available outside this file. This function is used
@@ -91,7 +91,7 @@ static uint8_t _vl53l5cx_poll_for_answer(
 
 	do {
 		status |= RdMulti(&(p_dev->platform), address, p_dev->temp_buffer, size);
-		status |= WaitMs(&(p_dev->platform), 1000);
+		status |= WaitMs(&(p_dev->platform), 20);
 
 		/*
 		printf("Mask: %02x, pos: %d, Poll address %02x: ", (p_dev->temp_buffer[pos] & mask), pos, address);
@@ -303,6 +303,7 @@ uint8_t vl53l5cx_is_alive(
 uint8_t vl53l5cx_init(
 		VL53L5CX_Configuration		*p_dev)
 {
+	ESP_LOGI(TAG, "Starting sensor init, address: %02x", p_dev->platform.address);
 	uint8_t tmp, status = VL53L5CX_STATUS_OK;
 	uint8_t pipe_ctrl[] = {VL53L5CX_NB_TARGET_PER_ZONE, 0x00, 0x01, 0x00};
 	uint32_t single_range = 0x01;
@@ -333,10 +334,12 @@ uint8_t vl53l5cx_init(
 	status |= WrByte(&(p_dev->platform), 0x000A, 0x01);
 	status |= WaitMs(&(p_dev->platform), 100);
 
+
 	/* Wait for sensor booted (several ms required to get sensor ready ) */
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
+	ESP_LOGD(TAG, "Before poll...");
 	status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x06, 0xff, 1);
-
+	ESP_LOGD(TAG, "After poll");
 	status |= WrByte(&(p_dev->platform), 0x000E, 0x01);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 
