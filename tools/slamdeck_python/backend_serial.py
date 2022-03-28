@@ -22,7 +22,8 @@ class BackendSerial(Backend):
         ports = list_ports.comports()
 
         if ports:
-            logging.debug(f'Found folowing active ports: {"\n".join(ports)}')
+            logging.debug(f'Found folowing active ports: ', end='')
+            logging.debug({'\n'.join(ports)})
         else:
             logging.error('No active ports found')
             return False

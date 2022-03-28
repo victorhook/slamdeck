@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import typing as t
 
 
@@ -29,4 +30,22 @@ class Observable:
             subscriber.on_change(value)
 
 
-subscriber(lambda msg: print(msg))
+class BinaryPacket(ABC):
+    @abstractmethod
+    def as_bytes(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+@dataclass
+class SimplePacket(BinaryPacket):
+    data: bytes
+
+    def as_bytes(self) -> bytes:
+        return self.data
+
+    def __len__(self) -> bytes:
+        return len(self.data)

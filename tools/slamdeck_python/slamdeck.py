@@ -6,56 +6,13 @@ import numpy as np
 import struct
 import typing as t
 import logging
+from slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode, VL53L5CX_Resolution,
+                          VL53L5CX_RangingMode, VL53L5CX_Status,
+                          VL53L5CX_TargetOrder, SlamdeckCommand,
+                          SlamdeckResponse)
 
 
 from utils import Observable, Subscriber
-
-
-""" Slamdeck API commands """
-
-class SlamdeckCommand(IntEnum):
-    GET_SENSOR_STATUS = 0
-    GET_DATA_FROM_SENSOR = 1
-    GET_I2C_ADDRESS = 2
-    SET_I2C_ADDRESS = 3
-    GET_POWER_MODE = 4
-    SET_POWER_MODE = 5
-    GET_RESOLUTION = 6
-    SET_RESOLUTION = 7
-    GET_RANGING_FREQUENCY_HZ = 8
-    SET_RANGING_FREQUENCY_HZ = 9
-    GET_INTEGRATION_TIME_MS = 10
-    SET_INTEGRATION_TIME_MS = 11
-    GET_SHARPENER_PERCENT = 12
-    SET_SHARPENER_PERCENT = 13
-    GET_TARGET_ORDER = 14
-    SET_TARGET_ORDER = 15
-    GET_RANGING_MODE = 16
-    SET_RANGING_MODE = 17
-
-class SlamdeckResponse(IntEnum):
-    RESULT_OK = 0
-
-class VL53L5CX_Status(IntEnum):
-    SENSOR_FAILED      = 0
-    SENSOR_NOT_ENABLED = 1
-    SENSOR_OK          = 2
-
-class VL53L5CX_PowerMode(IntEnum):
-    POWER_MODE_SLEEP  = 0
-    POWER_MODE_WAKEUP = 1
-
-class VL53L5CX_Resolution(IntEnum):
-    RESOLUTION_4X4 = 16
-    RESOLUTION_8X8 = 64
-
-class VL53L5CX_TargetOrder(IntEnum):
-    TARGET_ORDER_CLOSEST   = 1
-    TARGET_ORDER_STRONGEST = 2
-
-class VL53L5CX_RangingMode(IntEnum):
-    RANGING_MODE_CONTINUOUS = 1
-    RANGING_MODE_AUTONOMOUS = 3
 
 
 @dataclass
@@ -244,7 +201,7 @@ class Slamdeck(Subscriber):
         self._backend.cb_on_new_data.add_callback(callback)
 
     def _cmd_execute(self,
-                     type: SlamdeckCommand,
+                     command: SlamdeckCommand,
                      sensor: Sensor,
                      on_complete: callable = None,
                      bytes_to_read: uint32 = 0,
@@ -254,5 +211,10 @@ class Slamdeck(Subscriber):
             logging.error('Slamdeck not connected yet, can\'t issue commands.')
             return
 
-        cmd = struct.pack_into('BBB', type, sensor, data)
-        self._backend.write(cmd, bytes_to_read, on_complete)
+        packet = SlamdeckApiPacket(
+            command=command,
+            sensor=sensor,
+            data=data
+        )
+
+        self._backend.write(packet, bytes_to_read, on_complete)

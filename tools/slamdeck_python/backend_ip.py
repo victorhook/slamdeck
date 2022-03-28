@@ -1,10 +1,10 @@
 import socket
 import logging
 
+
 from backend import Backend
 
-
-class BackendSerial(Backend):
+class BackendIp(Backend):
 
     def __init__(self, ip: str, port: int) -> None:
         super().__init__()
@@ -13,7 +13,7 @@ class BackendSerial(Backend):
         self._port = port
 
     def do_start(self) -> bool:
-        if self._socket is not None:
+        if self._sock is not None:
             logging.error('Already connected')
             return False
 
@@ -32,16 +32,20 @@ class BackendSerial(Backend):
         self._sock = None
         return True
 
-    def write(self, data: bytes) -> int:
+    def do_write(self, data: bytes) -> int:
         if self._sock is None:
             logging.error('Failed to write, not connected to serial')
             return False
 
         return self._sock.send(data)
 
-    def read(self, size: int) -> bytes:
+    def do_read(self, size: int) -> bytes:
         if self._sock is None:
             logging.error('Failed to read, not connected to serial')
             return False
 
         return self._sock.recv(size)
+
+
+
+

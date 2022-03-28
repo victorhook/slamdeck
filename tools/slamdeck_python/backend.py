@@ -7,6 +7,7 @@ import typing as t
 from threading import Thread, Event, currentThread
 import logging
 from queue import Queue
+from utils import BinaryPacket
 
 
 class Callback:
@@ -22,7 +23,7 @@ class Callback:
 class Callbacks:
 
     def __init__(self):
-        self._callbacks: t.List[Callback]
+        self._callbacks: t.List[Callback] = []
 
     def add_callback(self, function: callable, args: tuple = tuple()) -> None:
         if type(function) is not Callback:
@@ -67,20 +68,24 @@ class Backend(ABC):
             return False
 
     def stop(self) -> bool:
+        logging.debug('Stopping backend thread')
         self._is_running.clear()
         if self.do_stop():
             self.cb_disconnected()
         else:
             self.cb_connection_error('Failure during disconnect')
 
-    def write(self, data: bytes, bytes_to_read: int, on_complete: callable) -> None:
+    def write(self, data: BinaryPacket, bytes_to_read: int, on_complete: callable) -> None:
+        if not self._is_running.is_set():
+            logging.warning('Can\'t write data when not connected!')
+            return
         self._action_queue.put(Action(
             data_to_write=data,
             bytes_to_read=bytes_to_read,
             on_complete=on_complete
         ))
 
-    def is_running(self) -> bool:
+    def is_connected(self) -> bool:
         return self._is_running.is_set()
 
     """ --- Abstract methods --- """
@@ -108,14 +113,19 @@ class Backend(ABC):
             self._write(action.data_to_write)
             self._read(action.bytes_to_read, action.on_complete)
 
-    def _write(self, data: bytes) -> None:
-        logging.debug(f'Writing {len(bytes)} bytes')
-        return self.do_write(data)
+    def _write(self, packet: BinaryPacket) -> None:
+        logging.debug(f'Writing {len(packet)} bytes')
+        return self.do_write(packet.as_bytes())
 
     def _read(self, size: int, on_complete: callable) -> None:
-        logging.debug(f'Reading {len(bytes)} bytes: ', end='')
-        data = self.do_read(size)
-        logging.debug('{byte:02x} '.join(byte for byte in data))
+        if size == 0:
+            logging.debug(f'0 bytes to read, not reading!')
+            data = None
+        else:
+            data = self.do_read(size)
+            logging.debug(f'Reading {size} bytes: ' + \
+                          ' '.join(f'{byte:02x} ' for byte in data))
+
         if on_complete is not None:
             on_complete(data)
 
