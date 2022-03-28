@@ -5,7 +5,6 @@
 #include "esp_err.h"
 
 #include "vl53l5cx.h"
-#include "vl53l5cx_api.h"
 #include "platform.h"
 
 
@@ -17,11 +16,25 @@
 #define clear_status(sensor) (sensor->status = 0)
 #define read_status(sensor, status_bit) ( sensor->status & (1 << status_bit) )
 
+#define DO_DEBUG
+#ifdef DO_DEBUG
+#define return_res(res) \
+if (res) \
+    ESP_LOGE(TAG, "Error: %s", esp_err_to_name(res)); \
+    return res
+#else
+#define return_res(res) \
+    return res
+#endif
+
+
+
 static const char* TAG = "VL53L5CX";
 
 typedef struct {
     VL53L5CX_id_e           id;
     gpio_num_t              enable_pin;
+    uint8_t                 data_ready;
     uint32_t                integration_time_ms;
     uint8_t                 sharpener_percent;
     uint8_t                 ranging_frequency_hz;
@@ -150,6 +163,55 @@ uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
     update_status(this_sensor, SENSOR_STATUS_INITIALIZED, 1);
     return RESULT_OK;
 }
+
+uint8_t VL53L5CX_start(VL53L5CX_id_e sensor)
+{
+    uint8_t res = vl53l5cx_start_ranging(&get_sensor(sensor)->config);
+    #ifdef DO_DEBUG
+        if (res)
+            ESP_LOGD(TAG, "Failed to start ranging with sensor %d", (uint8_t) sensor);
+    #endif
+    return res;
+}
+
+uint8_t VL53L5CX_data_ready(VL53L5CX_id_e sensor)
+{
+    VL53L5CX_t* this_sensor = get_sensor(sensor);
+    uint8_t res = vl53l5cx_check_data_ready(&this_sensor->config, &this_sensor->data_ready);
+    #ifdef DO_DEBUG
+        if (res)
+            ESP_LOGD(TAG, "I2C error checking data ready");
+    #endif
+    return this_sensor->data_ready;
+}
+
+uint8_t VL53L5CX_collect_data(VL53L5CX_id_e sensor)
+{
+    VL53L5CX_t* this_sensor = get_sensor(sensor);
+    uint8_t res = vl53l5cx_get_ranging_data(&this_sensor->config, &this_sensor->result);
+    #ifdef DO_DEBUG
+        if (res)
+            ESP_LOGD(TAG, "I2C error getting data");
+    #endif
+    return res;
+}
+
+const VL53L5CX_ResultsData* VL53L5CX_get_data(VL53L5CX_id_e sensor)
+{
+    VL53L5CX_t* this_sensor = get_sensor(sensor);
+    return &this_sensor->result;
+}
+
+uint8_t VL53L5CX_stop(VL53L5CX_id_e sensor)
+{
+    uint8_t res = vl53l5cx_stop_ranging(&get_sensor(sensor)->config);
+    #ifdef DO_DEBUG
+        if (res)
+            ESP_LOGD(TAG, "Failed to stop ranging");
+    #endif
+    return res;
+}
+
 
 /* --- VL53L5CX API --- */
 uint8_t VL53L5CX_set_enable(VL53L5CX_id_e sensor, const uint8_t is_enabled)

@@ -9,11 +9,11 @@
 #define SLAMDECK_GPIO_LED_GREEN     GPIO_NUM_4
 #define SLAMDECK_GPIO_ROM_BOOT_SRC  GPIO_NUM_46
 #define SLAMDECK_GPIO_BOOT_BUTTON   GPIO_NUM_0
-#define SLAMDECK_GPIO_SENSOR_1      GPIO_NUM_15   // Onboard main PCB
-#define SLAMDECK_GPIO_SENSOR_2      GPIO_NUM_33   // Front
-#define SLAMDECK_GPIO_SENSOR_3      GPIO_NUM_11   // Right
-#define SLAMDECK_GPIO_SENSOR_4      GPIO_NUM_5    // Back
-#define SLAMDECK_GPIO_SENSOR_5      GPIO_NUM_40   // Left
+#define SLAMDECK_GPIO_SENSOR_MAIN   GPIO_NUM_15   // Onboard main PCB
+#define SLAMDECK_GPIO_SENSOR_FRONT  GPIO_NUM_33   // Front
+#define SLAMDECK_GPIO_SENSOR_RIGHT  GPIO_NUM_11   // Right
+#define SLAMDECK_GPIO_SENSOR_BACK   GPIO_NUM_5    // Back
+#define SLAMDECK_GPIO_SENSOR_LEFT   GPIO_NUM_40   // Left
 
 #define SLAMDECK_I2C_SCL_CF         GPIO_NUM_7
 #define SLAMDECK_I2C_SDA_CF         GPIO_NUM_8
@@ -37,4 +37,4 @@
 
 
 /* --- Functions --- */
-uint8_t slamdeck_init();
+void slamdeck_init();

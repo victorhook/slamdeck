@@ -38,3 +38,5 @@ void com_receive_test_blocking(esp_routable_packet_t * packet);
 void com_receive_wifi_ctrl_blocking(esp_routable_packet_t * packet);
 
 void com_receive_system_blocking(esp_routable_packet_t * packet);
+
+void com_receive_app_blocking(esp_routable_packet_t * packet);

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "driver/gpio.h"
+#include "vl53l5cx_api.h"
 
+
+#define VL53L5CX_RESULT_MAX_BUF_SIZE 128
 
 typedef enum {
     RESULT_OK,
@@ -45,7 +48,14 @@ typedef enum {
     ID_LEFT  = 5
 } VL53L5CX_id_e;
 
+/* --- Control --- */
 uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin);
+uint8_t VL53L5CX_start(VL53L5CX_id_e sensor);
+uint8_t VL53L5CX_stop(VL53L5CX_id_e sensor);
+uint8_t VL53L5CX_collect_data(VL53L5CX_id_e sensor);
+uint8_t VL53L5CX_data_ready(VL53L5CX_id_e sensor);
+const VL53L5CX_ResultsData* VL53L5CX_get_data(VL53L5CX_id_e sensor);
+/* --- Setters --- */
 uint8_t VL53L5CX_set_enable(VL53L5CX_id_e sensor, const uint8_t is_enabled);
 uint8_t VL53L5CX_set_i2c_address(VL53L5CX_id_e sensor, const uint8_t address);
 uint8_t VL53L5CX_set_power_mode(VL53L5CX_id_e sensor, const VL53L5CX_power_mode_e power_mode);

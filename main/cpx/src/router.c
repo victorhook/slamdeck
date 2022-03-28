@@ -59,8 +59,8 @@ static CPXRoutablePacket_t espRxBuf;
 typedef void (*Receiver_t)(CPXRoutablePacket_t* packet);
 typedef void (*Sender_t)(const CPXRoutablePacket_t* packet);
 
-static const int START_UP_GAP8_ROUTER_RUNNING = BIT0;
-static const int START_UP_CF_ROUTER_RUNNING = BIT1;
+//static const int START_UP_GAP8_ROUTER_RUNNING = BIT0;
+//static const int START_UP_CF_ROUTER_RUNNING = BIT1;
 static const int START_UP_ESP_ROUTER_RUNNING = BIT2;
 static const int START_UP_WIFI_ROUTER_RUNNING = BIT3;
 static EventGroupHandle_t startUpEventGroup;
@@ -104,11 +104,11 @@ static void route(Receiver_t receive, CPXRoutablePacket_t* rxp, RouteContext_t* 
         ESP_LOGD("ROUTER", "%s [0x%02X] -> GAP8 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, spi_transport_send, SPI_TRANSPORT_MTU);
         break;
-      */
       case CPX_T_STM32:
         ESP_LOGD("ROUTER", "%s [0x%02X] -> STM32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, uart_transport_send, UART_TRANSPORT_MTU);
         break;
+      */
       case CPX_T_ESP32:
         ESP_LOGD("ROUTER", "%s [0x%02X] -> ESP32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, espTransportSend, ESP_TRANSPORT_MTU);
@@ -127,12 +127,13 @@ static void router_from_gap8(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_GAP8_ROUTER_RUNNING);
   route(spi_transport_receive, &spiRxBuf, &gap8_task_context, "GAP8");
 }
-*/
+
 
 static void router_from_crazyflie(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_CF_ROUTER_RUNNING);
   route(uart_transport_receive, &uartRxBuf, &cf_task_context, "STM32");
 }
+*/
 
 static void router_from_esp32(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_ESP_ROUTER_RUNNING);
@@ -147,18 +148,18 @@ static void router_from_wifi(void* _param) {
 
 void router_init() {
   startUpEventGroup = xEventGroupCreate();
-  // xEventGroupClearBits(startUpEventGroup, START_UP_CF_ROUTER_RUNNING | START_UP_ESP_ROUTER_RUNNING | START_UP_WIFI_ROUTER_RUNNING);
-  xEventGroupClearBits(startUpEventGroup, START_UP_GAP8_ROUTER_RUNNING | START_UP_CF_ROUTER_RUNNING | START_UP_ESP_ROUTER_RUNNING | START_UP_WIFI_ROUTER_RUNNING);
+  xEventGroupClearBits(startUpEventGroup, START_UP_ESP_ROUTER_RUNNING | START_UP_WIFI_ROUTER_RUNNING);
+  // xEventGroupClearBits(startUpEventGroup, START_UP_GAP8_ROUTER_RUNNING | START_UP_CF_ROUTER_RUNNING | START_UP_ESP_ROUTER_RUNNING | START_UP_WIFI_ROUTER_RUNNING);
 
   //xTaskCreate(router_from_gap8, "Router from GAP8", 5000, NULL, 1, NULL);
-  xTaskCreate(router_from_crazyflie, "Router from CF", 5000, NULL, 1, NULL);
+  //xTaskCreate(router_from_crazyflie, "Router from CF", 5000, NULL, 1, NULL);
   xTaskCreate(router_from_esp32, "Router from ESP32", 5000, NULL, 1, NULL);
   xTaskCreate(router_from_wifi, "Router from WIFI", 5000, NULL, 1, NULL);
 
   ESP_LOGI("ROUTER", "Waiting for tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       //START_UP_GAP8_ROUTER_RUNNING |
-                      START_UP_CF_ROUTER_RUNNING |
+                      // START_UP_CF_ROUTER_RUNNING |
                       START_UP_ESP_ROUTER_RUNNING |
                       START_UP_WIFI_ROUTER_RUNNING,
                       pdTRUE, // Clear bits before returning

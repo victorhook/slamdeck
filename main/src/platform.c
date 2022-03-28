@@ -25,6 +25,10 @@ static const char* TAG = "Platform";
 #define I2C_CMD_LINK_BUFF_SIZE 1024
 static uint8_t i2c_cmd_link_buf[I2C_CMD_LINK_BUFF_SIZE];
 
+/*
+Reset rx and tx buffers?
+*/
+
 
 static inline esp_err_t i2c_write_reg16_to_device(i2c_cmd_handle_t cmd, const uint8_t address, const uint16_t reg)
 {
