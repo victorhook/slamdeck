@@ -22,7 +22,8 @@ static const char* TAG = "Platform";
 #define check_err(res)
 #endif
 
-#define I2C_CMD_LINK_BUFF_SIZE 1024
+#define I2C_TRANSFER_CHUNK_SIZE 1024
+#define I2C_CMD_LINK_BUFF_SIZE I2C_LINK_RECOMMENDED_SIZE(I2C_TRANSFER_CHUNK_SIZE)
 static uint8_t i2c_cmd_link_buf[I2C_CMD_LINK_BUFF_SIZE];
 
 /*
@@ -39,11 +40,8 @@ static inline esp_err_t i2c_write_reg16_to_device(i2c_cmd_handle_t cmd, const ui
 	return i2c_master_write(cmd, data, 3, ACK_CHECK_EN);
 }
 
-static esp_err_t i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
+static esp_err_t i2c_master_read_chunk_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
-	#ifdef DO_DEBUG
-		printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
-	#endif
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create_static(i2c_cmd_link_buf, I2C_CMD_LINK_BUFF_SIZE);
 	uint8_t header[] = {
@@ -57,6 +55,7 @@ static esp_err_t i2c_master_read_from_reg16(const uint8_t address, const uint16_
 	i2c_master_stop(cmd);
 	esp_err_t result = i2c_master_cmd_begin(I2C_BUS, cmd, MASTER_TIMEOUT/portTICK_PERIOD_MS);
 	i2c_cmd_link_delete_static(cmd);
+
 	check_err(result);
 	if (result != ESP_OK) {
 		check_err(result);
@@ -76,12 +75,40 @@ static esp_err_t i2c_master_read_from_reg16(const uint8_t address, const uint16_
 	return result;
 }
 
-static esp_err_t i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
+static esp_err_t i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
 	#ifdef DO_DEBUG
-		printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
-    #endif
+		printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
+	#endif
+	uint16_t bytes_left = size;
+	uint16_t index = 0;
+	uint16_t chunk_size = 0;
+	esp_err_t err = ESP_OK;
+
+	while (bytes_left > 0) {
+		if (bytes_left > I2C_TRANSFER_CHUNK_SIZE)
+			chunk_size = I2C_TRANSFER_CHUNK_SIZE;
+		else
+			chunk_size = bytes_left;
+
+		err = i2c_master_read_chunk_from_reg16(address, reg+index, &buf[index], chunk_size);
+
+		if (!err) {
+			bytes_left -= chunk_size;
+			index += chunk_size;
+		}
+	}
+
+    return err;
+
+
+}
+
+
+static esp_err_t i2c_master_write_chunk_to_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
+{
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create_static(i2c_cmd_link_buf, I2C_CMD_LINK_BUFF_SIZE);
+
 	uint8_t header[] = {
 		(address << 1) | I2C_MASTER_WRITE,
 		(uint8_t) (reg >> 8),
@@ -104,7 +131,36 @@ static esp_err_t i2c_master_write_to_reg16(const uint8_t address, const uint16_t
 		printf("----------------------------------\n");
 	#endif
 
-    return result;
+	return result;
+}
+
+
+static esp_err_t i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
+{
+	#ifdef DO_DEBUG
+		printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
+    #endif
+
+	uint16_t bytes_left = size;
+	uint16_t index = 0;
+	uint16_t chunk_size = 0;
+	esp_err_t err = ESP_OK;
+
+	while (bytes_left > 0) {
+		if (bytes_left > I2C_TRANSFER_CHUNK_SIZE)
+			chunk_size = I2C_TRANSFER_CHUNK_SIZE;
+		else
+			chunk_size = bytes_left;
+
+		err = i2c_master_write_chunk_to_reg16(address, reg+index, &buf[index], chunk_size);
+
+		if (!err) {
+			bytes_left -= chunk_size;
+			index += chunk_size;
+		}
+	}
+
+    return err;
 }
 
 uint8_t RdByte(
