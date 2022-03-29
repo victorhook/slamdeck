@@ -38,17 +38,21 @@ class BackendIp(Backend):
 
     def do_write(self, data: bytes) -> int:
         if self._sock is None:
-            logging.error('Failed to write, not connected to serial')
-            return False
+            logging.error('Failed to write, not connected to socket')
+            return 0
 
         return self._sock.send(data)
 
     def do_read(self, size: int) -> bytes:
         if self._sock is None:
-            logging.error('Failed to read, not connected to serial')
-            return False
+            logging.error('Failed to read, not connected to socket')
+            return None
 
-        return self._sock.recv(size)
+        try:
+            return self._sock.recv(size)
+        except ConnectionResetError as e:
+            logging.warning(f'Connection reset by peer: {e}')
+            return None
 
 
 

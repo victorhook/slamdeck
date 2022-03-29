@@ -55,16 +55,17 @@ class Backend(ABC):
         self.cb_connection_error = Callbacks()
         self.cb_on_new_data = Callbacks()
         self._is_running = Event()
-        self._action_queue = Queue()
+        self._action_queue = Queue(maxsize=5)
 
-    def start(self) -> bool:
+    def start(self) -> Thread:
         if self._is_running.is_set():
             logging.warning('Backend already running')
-            return False
+            return None
 
         self._action_queue = Queue()
-        Thread(target=self._run, daemon=True).start()
-        return True
+        thread = Thread(target=self._run, daemon=True)
+        thread.start()
+        return thread
 
     def stop(self) -> bool:
         logging.debug('Stopping backend thread')
@@ -134,6 +135,10 @@ class Backend(ABC):
             data = None
         else:
             data = self.do_read(size)
+            if data is None:
+                self.stop()
+                return
+
             logging.debug(f'Reading {size} bytes: ' + \
                           ' '.join(f'{byte:02x} ' for byte in data))
 

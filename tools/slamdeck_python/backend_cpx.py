@@ -47,8 +47,12 @@ class BackendCPX(Backend):
         )
 
     def do_read(self, size: int) -> bytes:
+        first_two_bytes = self._backend.do_read(2)
+        if not first_two_bytes:
+            return
+
         # First 2 bytes of CPX wifi packet is the packet payload length.
-        size = struct.unpack('H', self._backend.do_read(2))[0]
+        size = struct.unpack('H', first_two_bytes)[0]
         # Next 2 bytes is the CPX header, and the remaining is the app data.
         data = self._backend.do_read(size)
         return data[CPX_Packet.HEADER_SIZE:]
