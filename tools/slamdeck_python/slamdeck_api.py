@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 import struct
 
-from cpx import BinaryPacket, CPX_Packet
+from slamdeck_python.cpx import BinaryPacket, CPX_Packet
 
 
 """ Slamdeck API commands """

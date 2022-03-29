@@ -1,4 +1,4 @@
-from backend import Backend
+from slamdeck_python.backend import Backend
 from serial import Serial
 from serial.tools import list_ports
 import logging

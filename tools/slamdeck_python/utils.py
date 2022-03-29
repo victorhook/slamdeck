@@ -22,12 +22,15 @@ class Observable:
         self._subscribers: t.Dict[str, Subscriber] = {}
 
     def subscribe(self, subscriber: Subscriber, attribute: str) -> None:
-        self._subscribers.get(attribute, []).append(subscriber)
+        subs = self._subscribers.get(attribute, [])
+        subs.append(subscriber)
+        self._subscribers[attribute] = subs
 
     def __setattr__(self, name, value) -> None:
         super().__setattr__(name, value)
-        for subscriber in self._subscribers.get(name, []):
-            subscriber.on_change(value)
+        if hasattr(self, '_subscribers'):
+            for subscriber in self._subscribers.get(name, []):
+                subscriber.on_change(value)
 
 
 class BinaryPacket(ABC):

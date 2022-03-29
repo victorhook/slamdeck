@@ -7,17 +7,18 @@ import typing as t
 from threading import Thread, Event, currentThread
 import logging
 from queue import Queue
-from utils import BinaryPacket
+
+from slamdeck_python.utils import BinaryPacket
 
 
 class Callback:
 
-    def __init__(self, function: callable, args: tuple) -> None:
+    def __init__(self, function: callable, args: tuple = tuple()) -> None:
         self._function = function
         self._args = args
 
-    def __call__(self) -> None:
-        self._function(*self._args)
+    def __call__(self, *args, **kwargs) -> None:
+        self._function(*args, *self._args, **kwargs)
 
 
 class Callbacks:
@@ -32,9 +33,9 @@ class Callbacks:
             cb = function
         self._callbacks.append(cb)
 
-    def __call__(self) -> None:
+    def __call__(self, *args, **kwargs) -> None:
         for callback in self._callbacks:
-            callback()
+            callback(*args, **kwargs)
 
 
 class Action:
@@ -57,15 +58,13 @@ class Backend(ABC):
         self._action_queue = Queue()
 
     def start(self) -> bool:
-        self.cb_connecting()
-        if self.do_start():
-            self._is_running.set()
-            logging.debug('Successful connect to backend')
-            logging.debug('Starting backend thread...')
-            Thread(target=self._run, daemon=True).start()
-        else:
-            logging.error('Failed to connect to backend')
+        if self._is_running.is_set():
+            logging.warning('Backend already running')
             return False
+
+        self._action_queue = Queue()
+        Thread(target=self._run, daemon=True).start()
+        return True
 
     def stop(self) -> bool:
         logging.debug('Stopping backend thread')
@@ -106,8 +105,19 @@ class Backend(ABC):
         pass
 
     def _run(self) -> None:
+        # Emit callback that we're trying to connect
+        self.cb_connecting()
+
+        if not self.do_start():
+            self.cb_connection_error('Failed to connect to backend')
+            logging.error('Failed to connect to backend')
+            return
+
+        self.cb_connected()
         self._is_running.set()
+        logging.debug('Successful connect to backend')
         logging.debug(f'Backend started in thread {currentThread().getName()}')
+
         while self._is_running.is_set():
             action: Action = self._action_queue.get()
             self._write(action.data_to_write)
@@ -115,6 +125,7 @@ class Backend(ABC):
 
     def _write(self, packet: BinaryPacket) -> None:
         logging.debug(f'Writing {len(packet)} bytes')
+        print(packet)
         return self.do_write(packet.as_bytes())
 
     def _read(self, size: int, on_complete: callable) -> None:
@@ -130,10 +141,11 @@ class Backend(ABC):
             on_complete(data)
 
 
-class BackendParams(dict):
+class BackendParams:
 
-    def __init__(self) -> None:
-        self.backend_class: Backend = None
+    def __init__(self, cls: Backend, params: dict) -> None:
+        self.backend_class = cls
+        self.params = params
 
 
 class BackendFactory:
@@ -141,5 +153,5 @@ class BackendFactory:
     @staticmethod
     def get_backend(params: BackendParams) -> Backend:
         return params.backend_class(
-            **params
+            **params.params
         )

@@ -1,12 +1,12 @@
 from threading import currentThread
 from xml.dom.expatbuilder import theDOMImplementation
-from backend import Backend
-from backend_ip import BackendIp
-from backend_serial import BackendSerial
+from slamdeck_python.backend import Backend
+from slamdeck_python.backend_ip import BackendIp
+from slamdeck_python.backend_serial import BackendSerial
 from enum import IntEnum
-from cpx import CPX_Function, CPX_Packet, CPX_Routing, CPX_Target
-from slamdeck_api import SlamdeckApiPacket, SlamdeckCommand, SlamdeckSensor
-from utils import BinaryPacket, SimplePacket
+from slamdeck_python.cpx import CPX_Function, CPX_Packet, CPX_Routing, CPX_Target
+from slamdeck_python.slamdeck_api import SlamdeckApiPacket, SlamdeckCommand, SlamdeckSensor
+from slamdeck_python.utils import BinaryPacket, SimplePacket
 import struct
 
 
@@ -17,9 +17,14 @@ class BackendCPXProtocol(IntEnum):
 
 class BackendCPX(Backend):
 
+    """
+        Decorator class.
+        This class wraps a current backend and implements the CPX
+        protocol on top.
+    """
+
     def __init__(self,
-                 backend_protocol: BackendCPXProtocol,
-                 backend_args: dict,
+                 backend: Backend,
                  route: CPX_Routing = CPX_Routing(
                      destination=CPX_Target.ESP32,
                      source=CPX_Target.HOST,
@@ -27,19 +32,8 @@ class BackendCPX(Backend):
                  )
             ) -> None:
         super().__init__()
-        self._backend_protocol: BackendCPXProtocol = backend_protocol
-        self._backend: Backend = self._get_backend(backend_args)
+        self._backend = backend
         self._route = route
-
-    def _get_backend(self, backend_args: dict) -> Backend:
-        if self._backend_protocol == BackendCPXProtocol.TCP:
-            backend = BackendIp(**backend_args)
-        elif self._backend_protocol == BackendCPXProtocol.UART:
-            backend = BackendSerial(**backend_args)
-        else:
-            raise RuntimeError(f'Failed to initialize backend {self._backend_protocol.name}')
-
-        return backend
 
     def do_start(self) -> bool:
         return self._backend.do_start()
@@ -55,9 +49,9 @@ class BackendCPX(Backend):
     def do_read(self, size: int) -> bytes:
         # First 2 bytes of CPX wifi packet is the packet payload length.
         size = struct.unpack('H', self._backend.do_read(2))[0]
-        # Rest of packet is the payload.
+        # Next 2 bytes is the CPX header, and the remaining is the app data.
         data = self._backend.do_read(size)
-        return data
+        return data[CPX_Packet.HEADER_SIZE:]
 
 
 

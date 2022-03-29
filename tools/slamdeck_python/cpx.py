@@ -3,7 +3,8 @@ from enum import IntEnum
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from utils import BinaryPacket
+
+from slamdeck_python.utils import BinaryPacket
 
 
 class CPX_Target(IntEnum):

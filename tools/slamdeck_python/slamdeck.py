@@ -1,18 +1,17 @@
 from dataclasses import dataclass
 from numpy import dtype, ndarray, uint16, uint32, uint8
-from backend import Backend, BackendParams, BackendFactory, Callback
 from enum import IntEnum
 import numpy as np
 import struct
 import typing as t
 import logging
-from slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode, VL53L5CX_Resolution,
+
+from slamdeck_python.backend import Backend, BackendParams, BackendFactory, Callback
+from slamdeck_python.slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode, VL53L5CX_Resolution,
                           VL53L5CX_RangingMode, VL53L5CX_Status,
                           VL53L5CX_TargetOrder, SlamdeckCommand,
-                          SlamdeckResponse)
-
-
-from utils import Observable, Subscriber
+                          SlamdeckResponse, SlamdeckSensor)
+from slamdeck_python.utils import Observable, Subscriber
 
 
 @dataclass
@@ -22,8 +21,7 @@ class Sensor(Observable):
         It implements the observable pattern, which allows subscribers
         to subscribe to any change that happens to the sensor state.
     """
-    id:                   int
-    name:                 str
+    id:                   SlamdeckSensor
     data:                 np.ndarray           = None
     i2C_address:          uint8                = 0x00
     integration_time_ms:  uint32               = 0
@@ -39,16 +37,16 @@ class Sensor(Observable):
 
 
 
-class Slamdeck(Subscriber):
+class Slamdeck:
 
     """
         This class represents the Slamdeck.
-        It implements the communiation protocl, and requires a backend driver
+        It implements the communiation protocol, and requires a backend driver
         to handle the communication with the actual slamdeck.
     """
 
-    def __init__(self, backend_params: BackendParams) -> None:
-        self._backend: Backend = BackendFactory.get_backend(backend_params)
+    def __init__(self, backend: Backend) -> None:
+        self._backend = backend
         self._sensors = self._create_sensors()
 
     def get_initial_sensor_settings(self, sensor: Sensor) -> None:
@@ -64,12 +62,15 @@ class Slamdeck(Subscriber):
 
     def _create_sensors(self) -> t.Dict[str, Sensor]:
         return {
-            'main':  Sensor(id=1, name='main'),
-            'front': Sensor(id=2, name='front'),
-            'right': Sensor(id=3, name='right'),
-            'back':  Sensor(id=4, name='back'),
-            'left':  Sensor(id=5, name='left')
+            SlamdeckSensor.MAIN:  Sensor(id=SlamdeckSensor.MAIN),
+            SlamdeckSensor.FRONT: Sensor(id=SlamdeckSensor.FRONT),
+            SlamdeckSensor.RIGHT: Sensor(id=SlamdeckSensor.RIGHT),
+            SlamdeckSensor.BACK:  Sensor(id=SlamdeckSensor.BACK),
+            SlamdeckSensor.LEFT:  Sensor(id=SlamdeckSensor.LEFT)
         }
+
+    def get_sensor(self, sensor: SlamdeckSensor) -> Sensor:
+        return self._sensors.get(sensor, None)
 
     """ --- Commands --- """
     def get_sensor_status(self, sensor: Sensor) -> None:
@@ -174,15 +175,20 @@ class Slamdeck(Subscriber):
 
     # -- Get data -- #
     def get_data_from_sensor(self, sensor: Sensor) -> None:
+        sensor = self.get_sensor(sensor)
         def _on_complete(data: bytes):
+            print(f'RX: {len(data)} : {data}')
             sensor.data = np.frombuffer(data, dtype=np.uint16)
-        self._cmd_execute(SlamdeckCommand.GET_DATA_FROM_SENSOR, sensor.id, _on_complete, sensor.resolution)
+        self._cmd_execute(SlamdeckCommand.GET_DATA_FROM_SENSOR, sensor.id, _on_complete, 36)
 
     def connect(self) -> None:
         self._backend.start()
 
     def disconnect(self) -> None:
         self._backend.stop()
+
+    def is_connected(self) -> bool:
+        return self._backend.is_connected()
 
     """ --- Callbacks --- """
     def add_cb_connecting(self, callback: Callback) -> None:
@@ -205,9 +211,9 @@ class Slamdeck(Subscriber):
                      sensor: Sensor,
                      on_complete: callable = None,
                      bytes_to_read: uint32 = 0,
-                     data: uint8 = b'0x00'
+                     data: uint8 = 0
             ) -> None:
-        if not self._backend.is_running():
+        if not self._backend.is_connected():
             logging.error('Slamdeck not connected yet, can\'t issue commands.')
             return
 

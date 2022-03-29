@@ -2,7 +2,7 @@ import socket
 import logging
 
 
-from backend import Backend
+from slamdeck_python.backend import Backend
 
 class BackendIp(Backend):
 
@@ -18,7 +18,11 @@ class BackendIp(Backend):
             return False
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.connect(((self._ip, self._port)))
+        try:
+            self._sock.connect(((self._ip, self._port)))
+        except OSError as e:
+            logging.debug(f'Failed to connect to IP backend: {e}')
+            return False
 
         logging.debug(f'Connected to {self._ip} on port {self._port}')
         return True
