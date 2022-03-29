@@ -66,17 +66,16 @@ static void wifi_ctrl()
 
 void app_main(void)
 {
-    esp_log_level_set("*", ESP_LOG_DEBUG);
-    /*
+    esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("VL53L5CX", ESP_LOG_DEBUG);
-    esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
     esp_log_level_set("I2C", ESP_LOG_DEBUG);
     esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
+    esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
+    esp_log_level_set("WIFI", ESP_LOG_DEBUG);
+    //esp_log_level_set("COM", ESP_LOG_DEBUG);
+    esp_log_level_set("UART", ESP_LOG_DEBUG);
+    esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
-    */
-    esp_log_level_set("nvs", ESP_LOG_INFO);
-    esp_log_level_set("esp_netif_lwip", ESP_LOG_INFO);
-    esp_log_level_set("efuse", ESP_LOG_INFO);
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

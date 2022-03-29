@@ -65,6 +65,8 @@ static const int START_UP_ESP_ROUTER_RUNNING = BIT2;
 static const int START_UP_WIFI_ROUTER_RUNNING = BIT3;
 static EventGroupHandle_t startUpEventGroup;
 
+static const char* TAG = "ROUTER";
+
 static void splitAndSend(const CPXRoutablePacket_t* rxp, RouteContext_t* context, Sender_t sender, const uint16_t mtu) {
   CPXRoutablePacket_t* txp = &context->txp;
 
@@ -73,6 +75,7 @@ static void splitAndSend(const CPXRoutablePacket_t* rxp, RouteContext_t* context
   uint16_t remainingToSend = rxp->dataLength;
   const uint8_t* startOfDataToSend = rxp->data;
   while (remainingToSend > 0) {
+
     uint16_t toSend = remainingToSend;
     bool lastPacket = rxp->route.lastPacket;
     if (toSend > mtu) {
@@ -87,6 +90,9 @@ static void splitAndSend(const CPXRoutablePacket_t* rxp, RouteContext_t* context
 
     remainingToSend -= toSend;
     startOfDataToSend += toSend;
+
+    // This is needed to let other tasks run as well, otherwise we sometimes crash.
+    vTaskDelay(10/portTICK_PERIOD_MS);
   }
 }
 
@@ -101,24 +107,24 @@ static void route(Receiver_t receive, CPXRoutablePacket_t* rxp, RouteContext_t* 
     switch (destination) {
       /*
       case CPX_T_GAP8:
-        ESP_LOGD("ROUTER", "%s [0x%02X] -> GAP8 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
+        ESP_LOGD(TAG, "%s [0x%02X] -> GAP8 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, spi_transport_send, SPI_TRANSPORT_MTU);
         break;
       case CPX_T_STM32:
-        ESP_LOGD("ROUTER", "%s [0x%02X] -> STM32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
+        ESP_LOGD(TAG, "%s [0x%02X] -> STM32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, uart_transport_send, UART_TRANSPORT_MTU);
         break;
       */
       case CPX_T_ESP32:
-        ESP_LOGD("ROUTER", "%s [0x%02X] -> ESP32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
+        ESP_LOGD(TAG, "%s [0x%02X] -> ESP32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, espTransportSend, ESP_TRANSPORT_MTU);
         break;
       case CPX_T_HOST:
-        ESP_LOGD("ROUTER", "%s [0x%02X] -> HOST [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
+        ESP_LOGD(TAG, "%s [0x%02X] -> HOST [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, wifi_transport_send, WIFI_TRANSPORT_MTU);
         break;
       default:
-        ESP_LOGW("ROUTER", "Cannot route from %s [0x%02X] to [0x%02X]", routerName, source, destination);
+        ESP_LOGW(TAG, "Cannot route from %s [0x%02X] to [0x%02X]", routerName, source, destination);
     }
   }
 }
@@ -156,7 +162,7 @@ void router_init() {
   xTaskCreate(router_from_esp32, "Router from ESP32", 5000, NULL, 1, NULL);
   xTaskCreate(router_from_wifi, "Router from WIFI", 5000, NULL, 1, NULL);
 
-  ESP_LOGI("ROUTER", "Waiting for tasks to start");
+  ESP_LOGI(TAG, "Waiting for tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       //START_UP_GAP8_ROUTER_RUNNING |
                       // START_UP_CF_ROUTER_RUNNING |
@@ -166,5 +172,5 @@ void router_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  ESP_LOGI("ROUTER", "Initialized");
+  ESP_LOGI(TAG, "Initialized");
 }

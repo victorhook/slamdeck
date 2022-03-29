@@ -30,8 +30,8 @@ typedef struct {
 } slamdeck_packet_rx_t;
 
 typedef struct {
-    uint8_t data[VL53L5CX_RESULT_MAX_BUF_SIZE];
-    uint8_t size;
+    uint8_t data[VL53L5CX_RESULT_MAX_BUF_SIZE * 5];     // *5 is for all sensors.
+    uint16_t size;
 } slamdeck_packet_tx_t;
 
 typedef struct {

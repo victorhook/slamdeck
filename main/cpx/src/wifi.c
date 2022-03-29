@@ -38,6 +38,8 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+#include "esp_task_wdt.h"
+
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "lwip/sockets.h"
@@ -141,10 +143,11 @@ static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t 
           ESP_LOGI(TAG, "11b: %d, 11g: %d, 11n: %d, lr: %d",
             ap_info.phy_11b, ap_info.phy_11g, ap_info.phy_11n, ap_info.phy_lr);
 
-          cpxInitRoute(CPX_T_ESP32, CPX_T_GAP8, CPX_F_WIFI_CTRL, &txp.route);
-          txp.data[0] = WIFI_CTRL_STATUS_WIFI_CONNECTED;
-          memcpy(&txp.data[1], &event->ip_info.ip.addr, sizeof(uint32_t));
-          txp.dataLength = 1 + sizeof(uint32_t);
+
+          // cpxInitRoute(CPX_T_ESP32, CPX_T_GAP8, CPX_F_WIFI_CTRL, &txp.route);
+          // txp.data[0] = WIFI_CTRL_STATUS_WIFI_CONNECTED;
+          // memcpy(&txp.data[1], &event->ip_info.ip.addr, sizeof(uint32_t));
+          // txp.dataLength = 1 + sizeof(uint32_t);
 
           // TODO: We should probably not block here...
           //espAppSendToRouterBlocking(&txp);
@@ -279,19 +282,31 @@ void wifi_bind_socket() {
   ESP_LOGD(TAG, "Socket listening to port %d", WIFI_SOCKET_PORT);
 }
 
-void wifi_wait_for_socket_connected() {
+typedef enum {
+    SOCKET_CONNECTION_RESULT_OK     = 0,
+    SOCKET_CONNECTION_RESULT_NOT_OK = 1
+} socket_connection_result_e;
+
+uint8_t wifi_wait_for_socket_connected() {
   ESP_LOGI(TAG, "Waiting for connection");
   struct sockaddr sourceAddr;
   uint addrLen = sizeof(sourceAddr);
   conn = accept(sock, (struct sockaddr *)&sourceAddr, &addrLen);
+  socket_connection_result_e result = SOCKET_CONNECTION_RESULT_OK;
+
   if (conn < 0) {
     ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+    result = SOCKET_CONNECTION_RESULT_NOT_OK;
   }
   ESP_LOGI(TAG, "Connection accepted");
+  return result;
 }
 
 void wifi_wait_for_disconnect() {
   xEventGroupWaitBits(s_wifi_event_group, WIFI_SOCKET_DISCONNECTED, pdTRUE, pdFALSE, portMAX_DELAY);
+  // Must close sockets properly.
+  shutdown(conn, 0);
+  close(conn);
 }
 
 static void wifi_task(void *pvParameters) {
@@ -314,14 +329,8 @@ static void wifi_task(void *pvParameters) {
 
   xEventGroupSetBits(startUpEventGroup, START_UP_MAIN_TASK);
   while (1) {
-    //blink_period_ms = 500;
     wifi_wait_for_socket_connected();
     ESP_LOGI(TAG, "Client connected");
-
-    //blink_period_ms = 100;
-    //cpxInitRoute(CPX_T_ESP32, CPX_T_ESP32, CPX_F_APP, &txp.route);
-    //espAppSendToRouterBlocking(&txp);
-
     wifi_wait_for_disconnect();
     ESP_LOGI(TAG, "Client disconnected");
 
@@ -372,7 +381,6 @@ static void wifi_sending_task(void *pvParameters) {
   xEventGroupSetBits(startUpEventGroup, START_UP_TX_TASK);
   while (1) {
     xQueueReceive(wifiTxQueue, &qPacket, portMAX_DELAY);
-
     txp_wifi.payloadLength = qPacket.dataLength + CPX_ROUTING_PACKED_SIZE;
 
     cpxRouteToPacked(&qPacket.route, &txp_wifi.routablePayload.route);
@@ -391,21 +399,20 @@ static void wifi_receiving_task(void *pvParameters) {
   while (1) {
     len = recv(conn, &rxp_wifi, 2, 0);
     if (len > 0) {
-      ESP_LOGD(TAG, "Wire data length %i", rxp_wifi.payloadLength);
+      ESP_LOGI(TAG, "Wire data length %i", rxp_wifi.payloadLength);
+
       int totalRxLen = 0;
       do {
         len = recv(conn, &rxp_wifi.payload[totalRxLen], rxp_wifi.payloadLength - totalRxLen, 0);
-        ESP_LOGD(TAG, "Read %i bytes", len);
+        ESP_LOGI(TAG, "Read %i bytes", len);
         totalRxLen += len;
       } while ((len > 0) && (totalRxLen < rxp_wifi.payloadLength));
-      ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp_wifi, 10, ESP_LOG_DEBUG);
+      //ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp_wifi, 10, ESP_LOG_DEBUG);
       xQueueSend(wifiRxQueue, &rxp_wifi, portMAX_DELAY);
     } else if (len == 0) {
-      //vTaskDelay(10);
       xEventGroupSetBits(s_wifi_event_group, WIFI_SOCKET_DISCONNECTED);
-      //printf("No data!\n");
     } else {
-      vTaskDelay(10);
+      vTaskDelay(50/portTICK_PERIOD_MS);
     }
   }
 }

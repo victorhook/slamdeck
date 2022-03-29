@@ -59,14 +59,16 @@ static esp_routable_packet_t rxp;
 static const int START_UP_RX_TASK = BIT0;
 static EventGroupHandle_t startUpEventGroup;
 
+static const char* TAG = "COM";
+
 static void com_rx(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_RX_TASK);
+
   while (1) {
-    ESP_LOGD("COM", "Waiting for packet");
-    vTaskDelay(100/portTICK_PERIOD_MS);
     espAppReceiveFromRouter(&rxp);
-    ESP_LOGD("COM", "Received packet for 0x%02X", rxp.route.destination);
-    ESP_LOG_BUFFER_HEX_LEVEL("COM", &rxp, 10, ESP_LOG_DEBUG);
+    ESP_LOGD(TAG, "Received packet for 0x%02X", rxp.route.destination);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp, 10, ESP_LOG_DEBUG);
+
     switch (rxp.route.function) {
       case CPX_F_TEST:
         xQueueSend(espTESTQueue, &rxp, (TickType_t) portMAX_DELAY);
@@ -81,7 +83,7 @@ static void com_rx(void* _param) {
         xQueueSend(espAppQueue, &rxp, (TickType_t) portMAX_DELAY);
         break;
       default:
-        ESP_LOGW("COM", "Cannot handle 0x%02X", rxp.route.function);
+        ESP_LOGW(TAG, "Cannot handle 0x%02X", rxp.route.function);
     }
   }
 }
@@ -101,7 +103,7 @@ void com_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  ESP_LOGI("COM", "Initialized");
+  ESP_LOGI(TAG, "Initialized");
 }
 
 void com_receive_test_blocking(esp_routable_packet_t * packet) {

@@ -114,6 +114,20 @@ static inline void restore_enabled_sensors()
     }
 }
 
+static void inline print_sensor(VL53L5CX_id_e sensor)
+{
+    VL53L5CX_t* this_sensor = get_sensor(sensor);
+    printf("-------------- Sensor %d -----------------\n", (uint8_t) sensor);
+    printf("power_mode: %d\n", this_sensor->power_mode);
+    printf("resolution: %d\n", this_sensor->resolution);
+    printf("ranging_frequency_hz: %d\n", this_sensor->ranging_frequency_hz);
+    printf("integration_time_ms: %d\n", this_sensor->integration_time_ms);
+    printf("sharpener_percent: %d\n", this_sensor->sharpener_percent);
+    printf("target_order: %d\n", this_sensor->target_order);
+    printf("ranging_mode: %d\n", this_sensor->ranging_mode);
+    printf("-------------------------------------------\n");
+}
+
 uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
 {
     VL53L5CX_t* this_sensor = get_sensor(sensor);
@@ -135,7 +149,7 @@ uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
     //VL53L5CX_set_i2c_address(sensor, this_sensor.platform.address);
     //restore_enabled_sensors();
 
-    // 2. Initialize the sensor.
+    // Initialize the sensor.
     update_status(this_sensor, SENSOR_STATUS_INITIALIZING, 1);
     result = vl53l5cx_init(&this_sensor->config);
     update_status(this_sensor, SENSOR_STATUS_INITIALIZING, 0);
@@ -149,9 +163,11 @@ uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
     ESP_LOGD(TAG, "Initialization complete");
     update_status(this_sensor, SENSOR_STATUS_INITIALIZED, 1);
 
-    return RESULT_OK;
+    // Set parameters
+    //vl53l5cx_set_resolution(&this_sensor->config, VL53L5CX_RESOLUTION_8X8);
+    vl53l5cx_set_ranging_frequency_hz(&this_sensor->config, 60);
 
-    // 3. Get all parameters for the sensor.
+    // Get all parameters for the sensor.
     vl53l5cx_get_power_mode(&this_sensor->config, (uint8_t*) &this_sensor->power_mode);
     vl53l5cx_get_resolution(&this_sensor->config, (uint8_t*) &this_sensor->resolution);
     vl53l5cx_get_ranging_frequency_hz(&this_sensor->config, &this_sensor->ranging_frequency_hz);
@@ -160,7 +176,10 @@ uint8_t VL53L5CX_init(VL53L5CX_id_e sensor, gpio_num_t enable_pin)
     vl53l5cx_get_target_order(&this_sensor->config, (uint8_t*) &this_sensor->target_order);
     vl53l5cx_get_ranging_mode(&this_sensor->config, (uint8_t*) &this_sensor->ranging_mode);
 
-    update_status(this_sensor, SENSOR_STATUS_INITIALIZED, 1);
+    print_sensor(sensor);
+
+    ESP_LOGD(TAG, "Read all parameters");
+
     return RESULT_OK;
 }
 
@@ -180,7 +199,7 @@ uint8_t VL53L5CX_data_ready(VL53L5CX_id_e sensor)
     uint8_t res = vl53l5cx_check_data_ready(&this_sensor->config, &this_sensor->data_ready);
     #ifdef DO_DEBUG
         if (res)
-            ESP_LOGD(TAG, "I2C error checking data ready");
+            ESP_LOGD(TAG, "I2C error checking data ready sensor %d: %02x", (uint8_t) sensor, res);
     #endif
     return this_sensor->data_ready;
 }
