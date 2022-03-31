@@ -2,9 +2,9 @@
 
 
 typedef enum {
-    SLAMDECK_LED_BLUE,
-    SLAMDECK_LED_RED,
-    SLAMDECK_LED_GREEN
+    LED_BLUE  = 0,
+    LED_RED   = 1,
+    LED_GREEN = 2
 } slamdeck_led_e;
 
 typedef enum {
@@ -16,13 +16,8 @@ typedef enum {
     LED_STATE_BLINK_2_HZ    = 2000
 } slamdeck_led_state_e;
 
-typedef struct {
-    slamdeck_led_e       led;
-    slamdeck_led_state_e state;
-} led_state_change_t;
 
-
-void led_set_state(const led_state_change_t* state_change);
+void led_set_state(slamdeck_led_e led, const slamdeck_led_state_e state);
 
 void led_init();
 

@@ -19,6 +19,7 @@ typedef struct {
 
 #define OFF 0
 #define ON  1
+#define MIN_DELAY LED_STATE_BLINK_0_25_HZ
 
 static led_t leds[] = {
     {SLAMDECK_GPIO_LED_BLUE, .state=LED_STATE_OFF, .value=OFF, .last_toggle=0},
@@ -31,81 +32,79 @@ static led_t leds[] = {
 EventGroupHandle_t startUpEventGroup;
 static const int START_UP_LEDS = BIT0;
 
-static xQueueHandle stateChangeQueue;
 
 static const char* TAG = "Leds";
 
 
-static inline esp_err_t led_set(led_t led, const uint8_t value)
+static inline esp_err_t led_set(led_t* led, const uint8_t value)
 {
-    led.value = value;
-    return gpio_set_level(led.pin, led.value);
+    led->value = value;
+    return gpio_set_level(led->pin, led->value);
 }
 
-static inline esp_err_t led_toggle(led_t led)
+static inline esp_err_t led_toggle(led_t* led, const uint32_t time)
 {
-    return led_set(led, led.value == ON ? OFF : ON);
+    led->last_toggle = time;
+    return led_set(led, led->value == ON ? OFF : ON);
 }
 
-static inline uint8_t time_to_toggle(led_t led, uint32_t time)
+static inline uint8_t time_to_toggle(const led_t* led, uint32_t time)
 {
-    if (led.state == LED_STATE_ON || led.state == LED_STATE_OFF)
+    if (led->state == LED_STATE_ON || led->state == LED_STATE_OFF)
         return 0;
     else
-        return (time - led.last_toggle) > led.state;
+        return (time - led->last_toggle) > led->state;
 }
 
-static void led_change_state(const led_state_change_t* state_change, const uint32_t time)
+static void led_change_state(const slamdeck_led_e led, const slamdeck_led_state_e state, const uint32_t time)
 {
-    led_t led = leds[state_change->led];
-    led.state = state_change->state;
-    led.last_toggle = time;
-    if (led.state == LED_STATE_ON)
-        led.value = ON;
+    led_t* led_to_change = &leds[led];
+    led_to_change->state = state;
+    led_to_change->last_toggle = time;
+    if (led_to_change->state == LED_STATE_ON)
+        led_to_change->value = ON;
     else
-        led.value = OFF;
+        led_to_change->value = OFF;
 }
 
-void led_set_state(const led_state_change_t* state_change)
+void led_set_state(const slamdeck_led_e led, const slamdeck_led_state_e state)
 {
-    xQueueSend(stateChangeQueue, state_change, 50/portTICK_PERIOD_MS);
+    led_change_state(led, state, get_current_time());
 }
 
 void led_task()
 {
     xEventGroupSetBits(startUpEventGroup, START_UP_LEDS);
-    led_t led;
+    ESP_LOGI(TAG, "Starting led");
 
     for (int i = 0; i < NBR_OF_LEDS; i++) {
-        led = leds[i];
+        led_t led = leds[i];
         ESP_ERROR_CHECK(gpio_reset_pin(led.pin));
         ESP_ERROR_CHECK(gpio_set_direction(led.pin, GPIO_MODE_OUTPUT));
-        ESP_ERROR_CHECK(led_set(led, ON));
+        led_set_state(i, LED_STATE_OFF);
     }
 
-    uint32_t time;
-    led_state_change_t state_change;
 
     while (1) {
-        time = xTaskGetTickCount() / portTICK_PERIOD_MS;
+        uint32_t time = get_current_time();
         for (int i = 0; i < NBR_OF_LEDS; i++) {
-            led = leds[i];
-            if (time_to_toggle(led, time))
-                led_toggle(led);
+            led_t* led = &leds[i];
+            //ESP_LOGI(TAG, "Led: %d, last: %d, diff: %d, state: %d time to toggle: %d", led.pin, led.last_toggle, (time - led.last_toggle), led.state, time_to_toggle(led, time));
+            if (time_to_toggle(led, time)) {
+                led_toggle(led, time);
+                //ESP_LOGI(TAG, "Time: %d, lasttoggle: %d, Time tot oggle pin %d", time, led->last_toggle, led->pin);
+            }
         }
 
-        if (xQueueReceive(stateChangeQueue, &state_change, 50/portTICK_PERIOD_MS) == pdTRUE)
-            led_change_state(&state_change, time);
-
+        vTaskDelay(MIN_DELAY / portTICK_PERIOD_MS);
     }
 }
 
 void led_init()
 {
-    stateChangeQueue = xQueueCreate(3, sizeof(led_state_change_t));
-
+    startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_LEDS);
-    xTaskCreate(led_task, "Led Task", 1024, NULL, 10, NULL);
+    xTaskCreate(led_task, "Led Task", 5000, NULL, 10, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_LEDS,
