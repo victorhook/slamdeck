@@ -161,7 +161,7 @@ uint8_t VL53L5CX_data_ready(VL53L5CX_t* sensor)
     uint8_t res = vl53l5cx_check_data_ready(&sensor->config, &sensor->data_ready);
     #ifdef DO_DEBUG
         if (res)
-            ESP_LOGD(TAG, "I2C error checking data ready sensor %d: %02x", (uint8_t) sensor, res);
+            ESP_LOGD(TAG, "I2C error checking data ready sensor %d: %02x", sensor->id, res);
     #endif
     return sensor->data_ready;
 }
@@ -175,6 +175,7 @@ uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor)
     #endif
     if (res == VL53L5CX_STATUS_OK) {
         sensor->last_sample = get_current_time();
+        sensor->samples++;
     }
     return res;
 }

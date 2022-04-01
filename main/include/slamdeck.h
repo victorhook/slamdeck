@@ -32,7 +32,7 @@
 
 #define SLAMDECK_I2C_BUS_MASTER     I2C_NUM_0
 #define SLAMDECK_I2C_BUS_CF         I2C_NUM_1
-#define SLAMDECK_I2C_MASTER_FREQ_HZ 400000
+#define SLAMDECK_I2C_MASTER_FREQ_HZ 1000000
 #define SLAMDECK_I2C_ADDRESS_CF      0x99
 
 #define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
