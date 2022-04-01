@@ -92,7 +92,7 @@ void led_task()
             //ESP_LOGI(TAG, "Led: %d, last: %d, diff: %d, state: %d time to toggle: %d", led.pin, led.last_toggle, (time - led.last_toggle), led.state, time_to_toggle(led, time));
             if (time_to_toggle(led, time)) {
                 led_toggle(led, time);
-                //ESP_LOGI(TAG, "Time: %d, lasttoggle: %d, Time tot oggle pin %d", time, led->last_toggle, led->pin);
+                //ESP_LOGI(TAG, "Time: %d, lasttoggle: %d, Time to toggle pin %d", time, led->last_toggle, led->pin);
             }
         }
 
@@ -104,7 +104,7 @@ void led_init()
 {
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_LEDS);
-    xTaskCreate(led_task, "Led Task", 5000, NULL, 10, NULL);
+    xTaskCreate(led_task, "Led Task", 5000, NULL, 3, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_LEDS,
