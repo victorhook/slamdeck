@@ -66,6 +66,8 @@ class SlamdeckApiPacket(BinaryPacket):
     sensor: SlamdeckSensor
     data: int = 0
 
+    HEADER_SIZE = 2
+
     def __str__(self) -> str:
         return f'  Command: {self.command.name} \n' \
                f'  Sensor: {self.sensor.name} \n' \

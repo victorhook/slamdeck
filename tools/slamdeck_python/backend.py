@@ -46,6 +46,35 @@ class Action:
         self.on_complete = on_complete
 
 
+class SlamdeckPacketQueue:
+
+    __queue_rx = Queue()
+    __queue_tx = Queue()
+
+    @classmethod
+    def get_tx_packet_blocking(cls) -> bytes:
+        return cls.__queue_tx.get()
+
+    @classmethod
+    def get_tx_packet_no_blocking(cls) -> bytes:
+        return cls.__queue_tx.get()
+
+    @classmethod
+    def get_rx_packet_blocking(cls) -> bytes:
+        return cls.__queue_rx.get()
+
+    @classmethod
+    def get_rx_packet_no_blocking(cls) -> bytes:
+        return cls.__queue_rx.get()
+
+    @classmethod
+    def put_tx_packet(cls, packet: bytes) -> None:
+        cls.__queue_tx.put(packet)
+
+    @classmethod
+    def put_rx_packet(cls, packet: bytes) -> None:
+        cls.__queue_rx.put(packet)
+
 class Backend(ABC):
 
     def __init__(self) -> None:
@@ -69,6 +98,10 @@ class Backend(ABC):
 
     def stop(self) -> bool:
         logging.debug('Stopping backend thread')
+        if not self._is_running.is_set():
+            self.cb_disconnected()
+            return
+
         self._is_running.clear()
         if self.do_stop():
             self.cb_disconnected()
@@ -126,8 +159,10 @@ class Backend(ABC):
 
     def _write(self, packet: BinaryPacket) -> None:
         logging.debug(f'Writing {len(packet)} bytes')
-        print(packet)
-        return self.do_write(packet.as_bytes())
+        data = packet.as_bytes()
+        # Put data to be sent to packet queue.
+        SlamdeckPacketQueue.put_tx_packet(data)
+        return self.do_write(data)
 
     def _read(self, size: int, on_complete: callable) -> None:
         if size == 0:
@@ -136,11 +171,15 @@ class Backend(ABC):
         else:
             data = self.do_read(size)
             if data is None:
+                # Something went wrong, let's disconnect.
                 self.stop()
                 return
 
             logging.debug(f'Reading {size} bytes: ' + \
                           ' '.join(f'{byte:02x} ' for byte in data))
+
+        # Put newly received data into rx queue.
+        SlamdeckPacketQueue.put_rx_packet(data)
 
         if on_complete is not None:
             on_complete(data)
