@@ -18,3 +18,5 @@ int i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t
 int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size);
 
 int i2c_is_initialized();
+
+int i2c_master_ping_address(const uint8_t address);
