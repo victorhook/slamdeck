@@ -12,6 +12,7 @@
 #include "slamdeck.h"
 
 #include "com.h"
+#include "WIFI_SSID.h"
 #include "wifi.h"
 #include "router.h"
 
@@ -32,8 +33,8 @@ esp_routable_packet_t packet = {
     .dataLength=CPX_HEADER_SIZE
 };
 
-static const char* SSID = "#Telia-8E5A88";
-static const char* PASS = "C*&Pk42nZ2#dTx2&";
+static const char* SSID = WIFI_SSID;
+static const char* PASS = WIFI_PASS;
 
 enum {
   WIFI_CTRL_SET_SSID                = 0x10,
@@ -69,12 +70,14 @@ void app_main(void)
     esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("VL53L5CX", ESP_LOG_DEBUG);
     esp_log_level_set("I2C", ESP_LOG_DEBUG);
-    esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
+    //esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
+    esp_log_level_set("SLAMDECK Api", ESP_LOG_DEBUG);
     esp_log_level_set("WIFI", ESP_LOG_DEBUG);
-    //esp_log_level_set("COM", ESP_LOG_DEBUG);
+    esp_log_level_set("COM", ESP_LOG_DEBUG);
     esp_log_level_set("UART", ESP_LOG_DEBUG);
     esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
+    esp_log_level_set("Platform", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -83,20 +86,20 @@ void app_main(void)
     ESP_LOGI(TAG, "Available esp_get_free_heap_size: %d", esp_get_free_heap_size());
     ESP_LOGI(TAG, "Available esp_get_free_internal_heap_size: %d", esp_get_free_internal_heap_size());
 
+
     led_init();
+    led_set_state(LED_BLUE, LED_STATE_BLINK_0_25_HZ);
+
     i2c_init();
 
     // Initialize esp APP transport before "com"
     espTransportInit();
-    com_init();
-    wifi_init();
-    router_init();
-
-    wifi_ctrl();
+    //com_init();
+    //wifi_init();
+    //router_init();
+    //wifi_ctrl();
     slamdeck_init();
 
-    while (1) {
-        vTaskDelay(portMAX_DELAY);
-    }
+    led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
 
 }
