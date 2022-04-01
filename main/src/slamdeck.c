@@ -1,203 +1,201 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
-#include "slamdeck.h"
-#include "vl53l5cx.h"
-
-// CPX
-#include "com.h"
-#include "slamdeck_api.h"
-
-
+#include "freertos/queue.h"
 #include "esp_log.h"
 #include "esp_err.h"
 
+// CPX
+#include "com.h"
 
-typedef struct {
-    VL53L5CX_id_e id;
-    gpio_num_t    enable_pin;
-} vl53l5cx_sensor_t;
+#include "i2c.h"
+#include "slamdeck.h"
+#include "slamdeck_api.h"
+#include "vl53l5cx.h"
 
-static const vl53l5cx_sensor_t enabled_sensors[] = {
-    //{.id=ID_MAIN, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN}
-    {.id=ID_BACK, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK}
+
+static VL53L5CX_t sensors[] = {
+    {.id=SLAMDECK_SENSOR_ID_MAIN,  .disabled=0, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
+    {.id=SLAMDECK_SENSOR_ID_FRONT, .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
+    {.id=SLAMDECK_SENSOR_ID_RIGHT, .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
+    {.id=SLAMDECK_SENSOR_ID_BACK,  .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
+    {.id=SLAMDECK_SENSOR_ID_LEFT,  .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
 };
 
-static const char* TAG = "SLAMDECK";
+
+#define NBR_OF_SENSORS sizeof(sensors) / sizeof(VL53L5CX_t)
+
+static VL53L5CX_t* enabled_sensors[NBR_OF_SENSORS];
+static uint8_t nbr_of_enabled_sensors = 0;
+
 
 static EventGroupHandle_t startUpEventGroup;
 static const int START_UP_SLAMDECK = BIT0;
-static const int START_UP_SLAMDECK_API = BIT1;
+static const int START_UP_SLAMDECK_API = START_UP_SLAMDECK_API_BIT;
+static const int START_UP_CHECK_DATA_READY = BIT2;
 
-static esp_routable_packet_t rx_esp;
-static esp_routable_packet_t tx_esp = {
-        .route={
-            .destination=CPX_T_HOST,
-            .source=CPX_T_ESP32,
-            .function=CPX_F_APP
+static xQueueHandle queueDataReady;
+
+static const char* TAG = "SLAMDECK";
+
+// vl53l5cx_set_resolution before ranging freq
+
+uint8_t slamdeck_sensor_enabled(const slamdeck_sensor_id_e sensor)
+{
+    return slamdeck_get_sensor(sensor) != 0;
+}
+
+VL53L5CX_t* slamdeck_get_sensor(const slamdeck_sensor_id_e sensor)
+{
+    for (uint8_t i = 0; i < nbr_of_enabled_sensors; i++) {
+        if (enabled_sensors[i]->id == sensor)
+            return enabled_sensors[i];
+    }
+    return 0;
+}
+
+static uint32_t last;
+static uint32_t samples;
+
+static void slamdeck_task_check_data_ready()
+{
+    xEventGroupSetBits(startUpEventGroup, START_UP_CHECK_DATA_READY);
+    last = get_current_time();
+    while (1) {
+
+        for (uint8_t id = 0; id < nbr_of_enabled_sensors; id++) {
+            VL53L5CX_t* sensor = enabled_sensors[id];
+            if (VL53L5CX_data_ready(sensor)) {
+                uint32_t now = get_current_time();
+                uint32_t dt = now - last;
+
+                if (dt > 1000) {
+                    ESP_LOGI(TAG, "Hz: %d", samples);
+                    last = now;
+                    samples = 0;
+                }
+                samples++;
+                xQueueSend(queueDataReady, &sensor, portMAX_DELAY);
+            }
         }
-    };
-static slamdeck_packet_rx_t rx;
-static slamdeck_packet_tx_t tx;
 
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
 
+static void set_sensor_default_values(VL53L5CX_t* sensor)
+{
+    //VL53L5CX_set_power_mode(sensor, VL53L5CX_POWER_MODE_WAKEUP);
+    VL53L5CX_set_resolution(sensor, VL53L5CX_RESOLUTION_4X4);
+    VL53L5CX_set_ranging_frequency_hz(sensor, 60); // 60 max for 4x4
+    //VL53L5CX_set_ranging_mode(sensor, VL53L5CX_RANGING_MODE_CONTINUOUS);
+    //VL53L5CX_set_sharpener_percent(sensor, 10); // Default is 5
+    //VL53L5CX_set_target_order(sensor, VL53L5CX_TARGET_ORDER_STRONGEST);
+    // Only when raning mode is Autonomous
+    //VL53L5CX_set_integration_time_ms(sensor, 5);
+}
 
 static void slamdeck_task()
 {
-    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK);
-    uint8_t sensors = sizeof(enabled_sensors) / sizeof(vl53l5cx_sensor_t);
-
-    if (sensors == 0) {
-        ESP_LOGE(TAG, "No enabled sensors found!");
-        while (1) {
-            vTaskDelay(portMAX_DELAY);
-        }
+    // Ensure i2c is initialized before starting
+    while (!i2c_is_initialized()) {
+        vTaskDelay(50/portTICK_PERIOD_MS);
     }
 
-    ESP_LOGD(TAG, "Initializing sensors. Total of %d enabled sensor(s) found.", sensors);
-    for (uint8_t i = 0; i < sensors; i++) {
-        vl53l5cx_sensor_t sensor = enabled_sensors[i];
-        VL53L5CX_init(sensor.id, sensor.enable_pin);
-    }
+    ESP_LOGI(TAG, "Initializing %d sensors.", NBR_OF_SENSORS);
+    VL53L5CX_t* sensor;
+    VL53L5CX_status_e result;
 
-    ESP_LOGD(TAG, "Starting sensors");
-    for (uint8_t i = 0; i < sensors; i++) {
-        vl53l5cx_sensor_t sensor = enabled_sensors[i];
-        VL53L5CX_start(sensor.id);
-    }
+    vTaskDelay(10/portTICK_PERIOD_MS);
 
-    ESP_LOGD(TAG, "Sensors started");
-    uint32_t t0 = xTaskGetTickCount();
-    uint32_t t1;
-
-
-    while (1) {
-
-        for (uint8_t i = 0; i < sensors; i++) {
-            vl53l5cx_sensor_t sensor = enabled_sensors[i];
-            if (VL53L5CX_data_ready(sensor.id)) {
-                VL53L5CX_collect_data(sensor.id);
-                /*
-                t1 = xTaskGetTickCount();
-                uint32_t dt = t1 - t0;
-                //printf("%4d\n", dt);
-                t0 = t1;
-                VL53L5CX_ResultsData* p_results = VL53L5CX_get_data(sensor.id);
-                printf("-------------------------------------\n");
-                for(int k = 0; k < 4; k++) {
-                    printf(" |");
-                    for(int j = 0; j < 4; j++) {
-                        printf(" %3d ", p_results->distance_mm[k+j]);
-                    }
-                    printf(" |\n");
-                }
-                printf("-------------------------------------\n");
-                fflush(stdout);
-                */
-            }
-        }
-        vTaskDelay(10/portTICK_PERIOD_MS);
-    }
-
-}
-
-
-
-static inline void printBuff(uint8_t* buff, uint16_t len)
-{
-    printf("[%d] ", len);
-    for (int i = 0; i < len; i++) {
-        printf("%02x ", buff[i]);
-    }
-    printf("\n");
-}
-
-static void cmd_handler_get_data(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    ESP_LOGD(TAG, "Reading sensor %d", rx->sensor);
-    VL53L5CX_ResultsData* data = VL53L5CX_get_data(rx->sensor);
-    tx->size = 32;
-    memcpy(tx->data, data->distance_mm, tx->size);
-
-    /*
-    printf("\n");
-    for (int i = 0; i < tx->size; i+=2) {
-        printf("%3d ", (uint16_t) tx->data[i]);
-    }
-    printf("\n");
-    */
-
-    ESP_LOGD(TAG, "Reading data!");
-}
-
-static void cmd_handler_test(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    ESP_LOGD(TAG, "Test!");
-    tx->size = 0;
-}
-
-// Array of function pointers to command handlers.
-void (*command_handler[])(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*) = {
-    cmd_handler_test,
-    cmd_handler_get_data
-};
-
-typedef void (*cmd_handler)(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*);
-typedef void (*cmd_handler_array[])(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*);
-
-static const int TOTAL_COMMANDS = sizeof(command_handler) / sizeof(cmd_handler);
-
-static void slamdeck_api()
-{
-    static slamdeck_packet_packed_t rx_packed;
-
-    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK_API);
-
-    while (1) {
-        // Receive packet & decode.
-        com_receive_app_blocking(&rx_esp);
-        //ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp, 2, ESP_LOG_DEBUG);
-
-        memcpy(&rx_packed, rx_esp.data, rx_esp.dataLength);
-        rx.command = rx_packed.command;
-        rx.sensor = rx_packed.sensor;
-        rx.data = rx_packed.data;
-        ESP_LOGD(TAG, "cmd: %02x, sensor: %02x, data: %02x", rx.command, rx.sensor, rx.data);
-
-        // Ensure we recognize the command
-        if ((rx.command < 0) || (rx.command >= TOTAL_COMMANDS)) {
-            ESP_LOGW(TAG, "Command %02x not recognized.", rx.command);
+    // Initialize gpio and disable all sensors
+    for (uint8_t id = 0; id < NBR_OF_SENSORS; id++) {
+        sensor = &sensors[id];
+        if (sensor->disabled)
             continue;
+        VL53L5CX_init_gpio(sensor);
+        VL53L5CX_disable(sensor);
+    }
+
+    for (uint8_t id = 0; id < NBR_OF_SENSORS; id++) {
+        sensor = &sensors[id];
+        if (sensor->disabled)
+            continue;
+        result = VL53L5CX_init(sensor);
+
+        if (result == VL53L5CX_STATUS_OK) {
+            ESP_LOGI(TAG, "Sensor %d initialized", id);
+            enabled_sensors[nbr_of_enabled_sensors] = sensor;
+            nbr_of_enabled_sensors++;
+        } else {
+            ESP_LOGI(TAG, "Sensor %d not initialized", id);
         }
+    }
 
-        // Send packet to correct API command handler
-        command_handler[rx.command](&rx, &tx);
+    // Start the sensors
+    ESP_LOGD(TAG, "Starting %d sensors", nbr_of_enabled_sensors);
+    for (uint8_t id = 0; id < nbr_of_enabled_sensors; id++) {
+        VL53L5CX_start(enabled_sensors[id]);
+    }
 
-        //tx.size = VL53L5CX_RESULT_MAX_BUF_SIZE * 5;
-        tx.size = 32;
+    // Set default configs for all enabled sensors
+    for (uint8_t id = 0; id < nbr_of_enabled_sensors; id++) {
+        set_sensor_default_values(enabled_sensors[id]);
+    }
 
-        memcpy(tx_esp.data, (const void*) tx.data, tx.size);
-        tx_esp.dataLength = tx.size;
-        espAppSendToRouterBlocking(&tx_esp);
+    xEventGroupSetBits(startUpEventGroup, START_UP_SLAMDECK);
+
+    ESP_LOGD(TAG, "%d Sensors started", nbr_of_enabled_sensors);
+    VL53L5CX_t* sensor_ready;
+
+    uint32_t t0 = get_current_time();
+
+    while (1) {
+        xQueueReceive(queueDataReady, &sensor_ready, portMAX_DELAY);
+        //VL53L5CX_collect_data(sensor_ready);
+        /*
+        const VL53L5CX_ResultsData* p_results = VL53L5CX_get_data(sensor_ready);
+
+        uint32_t t1 = get_current_time();
+        uint32_t dt = t1 - t0;
+        printf("%4d\n", dt);
+        t0 = t1;
+
+        // Check if there's api requests do be done.
+        if (available_api_request()) {
+            execute_api_request();
+        }
+        */
     }
 
 }
-
 
 void slamdeck_init()
 {
+
+    queueDataReady = xQueueCreate(5, sizeof(VL53L5CX_t*));
     startUpEventGroup = xEventGroupCreate();
-    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_SLAMDECK_API);
+    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_SLAMDECK_API | START_UP_CHECK_DATA_READY);
     xTaskCreate(slamdeck_task, "Slamdeck", 5000, NULL, 3, NULL);
-    xTaskCreate(slamdeck_api, "Slamdeck API", 6000, NULL, 3, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
-                        START_UP_SLAMDECK | START_UP_SLAMDECK_API,
+                        START_UP_SLAMDECK,
                         pdTRUE, // Clear bits before returning
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    ESP_LOGI(TAG, "Initialized");
+    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_SLAMDECK_API);
+    //xTaskCreate(slamdeck_api_task, "Slamdeck API", 6000, NULL, 3, NULL);
+    xTaskCreate(slamdeck_task_check_data_ready, "Slamdeck data ready", 5000, NULL, 3, NULL);
+
+
+    xEventGroupWaitBits(startUpEventGroup,
+                        START_UP_CHECK_DATA_READY,//| START_UP_SLAMDECK_API,
+                        pdTRUE, // Clear bits before returning
+                        pdTRUE, // Wait for all bits
+                        portMAX_DELAY);
+
+    ESP_LOGI(TAG, "%d Initialized", nbr_of_enabled_sensors);
 }
 
 

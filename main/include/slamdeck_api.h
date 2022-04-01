@@ -23,22 +23,55 @@ typedef enum {
     SLAMDECK_SET_RANGING_MODE = 17
 } slamdeck_command_e;
 
+typedef enum {
+    SLAMDECK_RESULT_OK                   = VL53L5CX_STATUS_OK,
+    SLAMDECK_RESULT_TIMEOUT              = VL53L5CX_STATUS_TIMEOUT_ERROR,
+    SLAMDECK_RESULT_COMMAND_INVALD       = 2,
+    SLAMDECK_RESULT_SENSOR_NOT_ENABLED   = 3,
+    SLAMDECK_RESULT_MCU_ERROR            = VL53L5CX_MCU_ERROR,
+    SLAMDECK_RESULT_INVALID_PARAM        = VL53L5CX_STATUS_INVALID_PARAM,
+    SLAMDECK_RESULT_ERROR                = VL53L5CX_STATUS_ERROR
+} slamdeck_result_e;
+
 typedef struct {
     slamdeck_command_e command;
-    VL53L5CX_id_e sensor;
+    uint8_t sensor;
     uint8_t data;
 } slamdeck_packet_rx_t;
 
 typedef struct {
     uint8_t data[VL53L5CX_RESULT_MAX_BUF_SIZE * 5];     // *5 is for all sensors.
     uint16_t size;
+    slamdeck_result_e result;
 } slamdeck_packet_tx_t;
 
 typedef struct {
     slamdeck_command_e command : 5;
-    VL53L5CX_id_e sensor       : 3;
+    uint8_t sensor       : 3;
     uint8_t data               : 8;
 } __attribute__((packed)) slamdeck_packet_packed_t;
 
 
+typedef enum {
+    SLAMDECK_SENSOR_ID_MAIN    = 0,
+    SLAMDECK_SENSOR_ID_FRONT   = 1,
+    SLAMDECK_SENSOR_ID_RIGHT   = 2,
+    SLAMDECK_SENSOR_ID_BACK    = 3,
+    SLAMDECK_SENSOR_ID_LEFT    = 4,
+    SLAMDECK_SENSOR_ID_NOT_SET = 0xff,
+} slamdeck_sensor_id_e;
+
+
+#define START_UP_SLAMDECK_API_BIT BIT1
+
+
+void slamdeck_api_task();
+
+int available_api_request();
+
+void execute_api_request();
+
+uint8_t slamdeck_sensor_enabled(const slamdeck_sensor_id_e sensor);
+
+VL53L5CX_t* slamdeck_get_sensor(const slamdeck_sensor_id_e sensor);
 

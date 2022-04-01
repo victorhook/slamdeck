@@ -104,6 +104,7 @@ static uint8_t _vl53l5cx_poll_for_answer(
 		if(timeout >= (uint8_t)200)	{ /* 2s timeout */
 			status |= (uint8_t)VL53L5CX_STATUS_TIMEOUT_ERROR;
 			ESP_LOGE(TAG, "VL53L5cx Timeout error");
+			break;
 		}
 		else if((size >= (uint8_t)4) && (p_dev->temp_buffer[2] >= (uint8_t)0x7f)) {
 			status |= VL53L5CX_MCU_ERROR;
@@ -303,7 +304,7 @@ uint8_t vl53l5cx_is_alive(
 uint8_t vl53l5cx_init(
 		VL53L5CX_Configuration		*p_dev)
 {
-	ESP_LOGI(TAG, "Starting sensor init, address: %02x", p_dev->platform.address);
+	ESP_LOGD(TAG, "Starting sensor init, address: %02x", p_dev->platform.address);
 	uint8_t tmp, status = VL53L5CX_STATUS_OK;
 	uint8_t pipe_ctrl[] = {VL53L5CX_NB_TARGET_PER_ZONE, 0x00, 0x01, 0x00};
 	uint32_t single_range = 0x01;
@@ -337,9 +338,9 @@ uint8_t vl53l5cx_init(
 
 	/* Wait for sensor booted (several ms required to get sensor ready ) */
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
-	ESP_LOGD(TAG, "Before poll...");
+	//ESP_LOGD(TAG, "Before poll...");
 	status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x06, 0xff, 1);
-	ESP_LOGD(TAG, "After poll");
+	//ESP_LOGD(TAG, "After poll");
 	status |= WrByte(&(p_dev->platform), 0x000E, 0x01);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 
@@ -379,7 +380,7 @@ uint8_t vl53l5cx_init(
 	status |= WrByte(&(p_dev->platform), 0x20, 0x06);
 
 	/* Download FW into VL53L5 */
-	ESP_LOGI(TAG, "Downloading firmware!");
+	ESP_LOGD(TAG, "Downloading firmware!");
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x09);
 	status |= WrMulti(&(p_dev->platform),0,
 		(uint8_t*)&VL53L5CX_FIRMWARE[0],0x8000);
@@ -390,21 +391,21 @@ uint8_t vl53l5cx_init(
 	status |= WrMulti(&(p_dev->platform),0,
 		(uint8_t*)&VL53L5CX_FIRMWARE[0x10000],0x5000);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x01);
-	ESP_LOGI(TAG, "Firmware downloaded");
+	ESP_LOGD(TAG, "Firmware downloaded");
 
 	/* Check if FW correctly downloaded */
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 	status |= WrByte(&(p_dev->platform), 0x03, 0x0D);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x01);
-	ESP_LOGI(TAG, "Checking firmware...");
+	ESP_LOGD(TAG, "Checking firmware...");
 	status |= _vl53l5cx_poll_for_answer(p_dev, 1, 0, 0x21, 0x10, 0x10);
-	ESP_LOGI(TAG, "Firmware correct!");
+	ESP_LOGD(TAG, "Firmware correct!");
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
 	status += RdByte(&(p_dev->platform), 0x7fff, &tmp);
 	status |= WrByte(&(p_dev->platform), 0x0C, 0x01);
 
 	/* Reset MCU and wait boot */
-	ESP_LOGI(TAG, "Reseting MCU...");
+	ESP_LOGD(TAG, "Reseting MCU...");
 	status |= WrByte(&(p_dev->platform), 0x7FFF, 0x00);
 	status |= WrByte(&(p_dev->platform), 0x114, 0x00);
 	status |= WrByte(&(p_dev->platform), 0x115, 0x00);
@@ -417,7 +418,7 @@ uint8_t vl53l5cx_init(
 	status |= _vl53l5cx_poll_for_mcu_boot(p_dev);
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 
-	ESP_LOGI(TAG, "Reset complete...");
+	ESP_LOGD(TAG, "Reset complete...");
 
 	/* Get offset NVM data and store them into the offset buffer */
 	status |= WrMulti(&(p_dev->platform), 0x2fd8, (uint8_t*)VL53L5CX_GET_NVM_CMD, sizeof(VL53L5CX_GET_NVM_CMD));
@@ -426,17 +427,17 @@ uint8_t vl53l5cx_init(
 
 
 	(void)memcpy(p_dev->offset_data, p_dev->temp_buffer, VL53L5CX_OFFSET_BUFFER_SIZE);
-	ESP_LOGI(TAG, "Sending offset");
+	ESP_LOGD(TAG, "Sending offset");
 	status |= _vl53l5cx_send_offset_data(p_dev, VL53L5CX_RESOLUTION_4X4);
 
-	ESP_LOGI(TAG, "NVM Complete...");
+	ESP_LOGD(TAG, "NVM Complete...");
 
 	/* Set default Xtalk shape. Send Xtalk to sensor */
 	(void)memcpy(p_dev->xtalk_data, (uint8_t*)VL53L5CX_DEFAULT_XTALK,
 		VL53L5CX_XTALK_BUFFER_SIZE);
 	status |= _vl53l5cx_send_xtalk_data(p_dev, VL53L5CX_RESOLUTION_4X4);
 
-	ESP_LOGI(TAG, "Xtalk complete...");
+	ESP_LOGD(TAG, "Xtalk complete...");
 
 	/* Send default configuration to VL53L5CX firmware */
 	status |= WrMulti(&(p_dev->platform), 0x2c34,
@@ -458,7 +459,7 @@ uint8_t vl53l5cx_init(
 			VL53L5CX_DCI_SINGLE_RANGE,
 			(uint16_t)sizeof(single_range));
 
-	ESP_LOGI(TAG, "Init done...");
+	ESP_LOGD(TAG, "Init done...");
 
 	return status;
 }
@@ -469,8 +470,18 @@ uint8_t vl53l5cx_set_i2c_address(
 {
 	uint8_t status = VL53L5CX_STATUS_OK;
 
+	/*
+		Original:
+			Write:  addr >> 1
+			Change: addr
+
+		Change:
+			Write:  addr
+			Change: addr
+	*/
+
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x00);
-	status |= WrByte(&(p_dev->platform), 0x4, (uint8_t)(i2c_address >> 1));
+	status |= WrByte(&(p_dev->platform), 0x4, (uint8_t) i2c_address);
 	p_dev->platform.address = i2c_address;
 	status |= WrByte(&(p_dev->platform), 0x7fff, 0x02);
 

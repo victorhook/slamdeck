@@ -35,6 +35,7 @@
 #define SLAMDECK_I2C_MASTER_FREQ_HZ 400000
 #define SLAMDECK_I2C_ADDRESS_CF      0x99
 
+#define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
 
 /* --- Functions --- */
 void slamdeck_init();
