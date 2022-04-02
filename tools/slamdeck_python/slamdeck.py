@@ -29,7 +29,7 @@ class Sensor(Observable):
     integration_time_ms:  uint32               = 0
     sharpener_percent:    uint8                = 0
     ranging_frequency_hz: uint8                = 0
-    resolution:           VL53L5CX_Resolution  = 0
+    resolution:           VL53L5CX_Resolution  = VL53L5CX_Resolution.RESOLUTION_4X4
     power_mode:           VL53L5CX_PowerMode   = 0
     target_order:         VL53L5CX_TargetOrder = 0
     ranging_mode:         VL53L5CX_RangingMode = 0
@@ -138,10 +138,10 @@ class Slamdeck:
     def set_ranging_mode(self, sensor: Sensor, ranging_mode: VL53L5CX_RangingMode) -> None:
         self._cmd_execute(SlamdeckCommand.SET_RANGING_MODE, sensor, 'ranging_mode', 1, ranging_mode)
 
-    def get_data_from_sensor(self, sensor: Sensor) -> None:
+    def get_data_from_sensor(self, sensor: SlamdeckSensor) -> None:
         # Resolution is in bytes, but data as uint16, so multiply by 2.
-        bytes_to_read = (sensor.resolution * 2) + SlamdeckApiPacket.HEADER_SIZE
-        self._cmd_execute(SlamdeckCommand.GET_DATA_FROM_SENSOR, sensor, 'data', bytes_to_read)
+        #bytes_to_read = (sensor.resolution * 2) + SlamdeckApiPacket.HEADER_SIZE
+        self._cmd_execute(SlamdeckCommand.GET_DATA_FROM_SENSOR, sensor, 'data', 10)
 
     def connect(self) -> Thread:
         return self._backend.start()
@@ -169,8 +169,8 @@ class Slamdeck:
         self._backend.cb_on_new_data.add_callback(callback)
 
     def _cmd_on_complete(self,
-                             sensor: SlamdeckSensor,
                              command: SlamdeckCommand,
+                             sensor: SlamdeckSensor,
                              attribute: str,
                              value: object
             ) -> None:
@@ -183,7 +183,7 @@ class Slamdeck:
 
     def _cmd_execute(self,
                      command: SlamdeckCommand,
-                     sensor: Sensor,
+                     sensor: SlamdeckSensor,
                      attribute: str,
                      bytes_to_read: uint32 = 0,
                      data: uint8 = 0
@@ -202,6 +202,6 @@ class Slamdeck:
             if command == SlamdeckCommand.GET_DATA_FROM_SENSOR:
                 result = np.frombuffer(result, dtype=np.uint16)
 
-            self._cmd_on_complete(sensor, command, attribute, result)
+            self._cmd_on_complete(command, sensor, attribute, result)
 
         self._backend.write(packet, bytes_to_read, _on_complete)

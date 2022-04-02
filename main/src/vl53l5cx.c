@@ -156,12 +156,23 @@ VL53L5CX_status_e VL53L5CX_init(VL53L5CX_t* sensor)
     return RESULT_OK;
 }
 
+uint16_t VL53L5CX_get_data_size(const VL53L5CX_t* sensor)
+{
+    return sensor->resolution * 2;
+}
+
 uint8_t VL53L5CX_data_ready(VL53L5CX_t* sensor)
 {
     uint8_t res = vl53l5cx_check_data_ready(&sensor->config, &sensor->data_ready);
     #ifdef DO_DEBUG
-        if (res)
-            ESP_LOGD(TAG, "I2C error checking data ready sensor %d: %02x", sensor->id, res);
+        if (res) {
+            ESP_LOGD(TAG, "I2C error checking data ready sensor %d: %02x data is ready: %d", sensor->id, res, sensor->data_ready);
+            vTaskDelay(1000/portTICK_PERIOD_MS);
+            i2c_reset_tx_fifo(0);
+            i2c_reset_rx_fifo(0);
+            //VL53L5CX_stop(sensor);
+            //VL53L5CX_start(sensor);
+        }
     #endif
     return sensor->data_ready;
 }
@@ -191,7 +202,7 @@ uint8_t VL53L5CX_start(VL53L5CX_t* sensor)
     uint8_t res = vl53l5cx_start_ranging(&sensor->config);
     #ifdef DO_DEBUG
         if (res)
-            ESP_LOGD(TAG, "Failed to start ranging with sensor %d", (uint8_t) sensor);
+            ESP_LOGD(TAG, "Sensor %d, failed to start ranging: %d", sensor->id, res);
     #endif
     sensor->is_ranging = res == VL53L5CX_STATUS_OK ? IS_RANGING : IS_NOT_RANGING;
     return res;
@@ -202,7 +213,7 @@ uint8_t VL53L5CX_stop(VL53L5CX_t* sensor)
     uint8_t res = vl53l5cx_stop_ranging(&sensor->config);
     #ifdef DO_DEBUG
         if (res)
-            ESP_LOGD(TAG, "Failed to stop ranging");
+            ESP_LOGD(TAG, "Sensor %d failed to stop ranging: %d", sensor->id, res);
     #endif
     sensor->is_ranging = res == VL53L5CX_STATUS_OK ? IS_NOT_RANGING : IS_RANGING;
     return res;

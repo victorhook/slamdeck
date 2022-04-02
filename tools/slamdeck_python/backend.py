@@ -180,6 +180,7 @@ class Backend(ABC):
 
         # Put newly received data into rx queue.
         SlamdeckPacketQueue.put_rx_packet(data)
+        self.cb_on_new_data()
 
         if on_complete is not None:
             on_complete(data)

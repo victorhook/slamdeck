@@ -43,11 +43,10 @@ static inline void printBuff(uint8_t* buff, uint16_t len)
 
 static void cmd_handler_get_data(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
 {
-    ESP_LOGD(TAG, "Reading sensor %d", rx->sensor);
-    const VL53L5CX_ResultsData* data = VL53L5CX_get_data(rx->sensor);
-    tx->size = 32;
-    memcpy(tx->data, data->distance_mm, tx->size);
-    ESP_LOGD(TAG, "Reading data!");
+    VL53L5CX_t* sensor = slamdeck_get_sensor(rx->sensor);
+    tx->size = VL53L5CX_get_data_size(sensor);
+    ESP_LOGD(TAG, "Get data sensor %d, %d bytes", rx->sensor, tx->size);
+    memcpy(tx->data, (uint8_t*) sensor->result.distance_mm, tx->size);
 }
 
 typedef uint8_t (*vl53l5cx_setter)(VL53L5CX_t* sensor, const uint8_t arg);
@@ -180,6 +179,7 @@ void execute_api_request()
     // Ensure we recognize the command
     if ((rx.command < 0) || (rx.command >= TOTAL_COMMANDS)) {
         // We don't know this command, let the receiver know.
+        ESP_LOGW(TAG, "Failed to recognize command %d", rx.command);
         tx.size = 1;
         tx.data[0] = SLAMDECK_RESULT_COMMAND_INVALD;
     } else {
@@ -215,10 +215,8 @@ void slamdeck_api_task()
         // Wait for Slamdeck api request to finish
         xQueueReceive(api_request_queue_tx, &tx, portMAX_DELAY);
 
-        //tx.size = VL53L5CX_RESULT_MAX_BUF_SIZE * 5;
-        //tx.size = 32;
-
         // Copy data into esp_transport data packet.
+        ESP_LOGI(TAG, "Sending with size: %d", tx.size);
         memcpy(tx_esp.data, (const void*) tx.data, tx.size);
         tx_esp.dataLength = tx.size;
         espAppSendToRouterBlocking(&tx_esp);

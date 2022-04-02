@@ -127,7 +127,7 @@
      <item>
       <widget class="QTabWidget" name="mainTabs">
        <property name="currentIndex">
-        <number>2</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tabSensors">
         <attribute name="title">
@@ -383,7 +383,7 @@
          <item>
           <widget class="QTabWidget" name="tabSensorGraphics">
            <property name="currentIndex">
-            <number>1</number>
+            <number>0</number>
            </property>
            <widget class="QWidget" name="tabSingleSensor">
             <attribute name="title">

@@ -31,11 +31,12 @@ class SlamdeckResponse(IntEnum):
     RESULT_OK = 0
 
 class SlamdeckSensor(IntEnum):
-    MAIN  = 1
-    FRONT = 2
-    RIGHT = 3
-    BACK  = 4
-    LEFT  = 5
+    MAIN    = 0
+    FRONT   = 1
+    RIGHT   = 2
+    BACK    = 3
+    LEFT    = 4
+    NOT_SET = 0xff
 
 
 class VL53L5CX_Status(IntEnum):
@@ -79,7 +80,7 @@ class SlamdeckApiPacket(BinaryPacket):
     def as_bytes(self) -> bytes:
         return struct.pack(
                    'BB',
-                   self.command | (self.sensor << 5),
+                   self.command.value | (self.sensor.value << 5),
                    self.data
                 )
 

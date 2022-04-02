@@ -69,6 +69,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "stdio.h"
 
 static const char* TAG = "VL53L5CX Api";
@@ -749,6 +750,9 @@ uint8_t vl53l5cx_check_data_ready(
 	uint8_t status = VL53L5CX_STATUS_OK;
 
 	status |= RdMulti(&(p_dev->platform), 0x0, p_dev->temp_buffer, 4);
+	if (status != 0) {
+		printf("Error checking data ready: %d", status);
+	}
 
 	if((p_dev->temp_buffer[0] != p_dev->streamcount)
 			&& (p_dev->temp_buffer[0] != (uint8_t)255)
@@ -780,8 +784,15 @@ uint8_t vl53l5cx_get_ranging_data(
 	uint8_t status = VL53L5CX_STATUS_OK;
 	union Block_header *bh_ptr;
 	uint32_t i, j, msize;
+
+	uint64_t t2;
+
+	//t2 = esp_timer_get_time();
 	status |= RdMulti(&(p_dev->platform), 0x0,
 			p_dev->temp_buffer, p_dev->data_read_size);
+	//printf("Reading %d bytes ", p_dev->data_read_size);
+	//printf("%lld us\n", esp_timer_get_time() - t2);
+
 	p_dev->streamcount = p_dev->temp_buffer[0];
 	SwapBuffer(p_dev->temp_buffer, (uint16_t)p_dev->data_read_size);
 

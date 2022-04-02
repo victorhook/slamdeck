@@ -12,12 +12,16 @@ import struct
 
 class TestBandwidth(unittest.TestCase):
 
-    IP = '192.168.1.73'
+    #IP = '192.168.6.83'
+    IP = '192.168.0.23'
     PORT = 5000
 
     def setUp(self):
         self.sock = socket.socket()
+        self.sock.settimeout(2)
         self.sock.connect((self.IP, self.PORT))
+        self.sock.settimeout(None)
+        print(f'Connected to {self.IP}:{self.PORT}')
 
     def tearDown(self):
         self.sock.close()
@@ -25,16 +29,21 @@ class TestBandwidth(unittest.TestCase):
     def tttest_socket(self):
         packet = CPX_Packet(
             CPX_Routing(CPX_Target.ESP32, CPX_Target.HOST, CPX_Function.APP),
-            data=SlamdeckApiPacket(SlamdeckCommand.GET_SENSOR_STATUS, SlamdeckSensor.BACK)
+            data=SlamdeckApiPacket(SlamdeckCommand.GET_DATA_FROM_SENSOR, SlamdeckSensor.BACK)
             )
         self.sock.send(packet.as_bytes())
         size = struct.unpack('H', self.sock.recv(2))[0]
         packet = self.sock.recv(size)
+        print(packet)
         return size + 2
 
     def test_one(self):
         #self.tearDown()
         #self.setUp()
+        data = 0
+        data += self.tttest_socket()
+        return
+
         i = 0
         try:
             data = 0
