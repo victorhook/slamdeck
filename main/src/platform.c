@@ -16,11 +16,7 @@ uint8_t RdByte(
 		uint16_t RegisterAdress,
 		uint8_t *p_value)
 {
-	uint8_t r = i2c_master_read_from_reg16(p_platform->address, RegisterAdress, p_value, 1);
-	#ifdef DO_DEBUG
-		ESP_LOGD(TAG, "[%02x] Read %02x to %04x", p_platform->address, *p_value, RegisterAdress);
-	#endif
-	return r;
+	return RdMulti(p_platform, RegisterAdress, p_value, 1);
 }
 
 uint8_t WrByte(
@@ -28,11 +24,7 @@ uint8_t WrByte(
 		uint16_t RegisterAdress,
 		uint8_t value)
 {
-	#ifdef DO_DEBUG
-		ESP_LOGD(TAG, "[%02x] Writing %02x to %04x", p_platform->address, value, RegisterAdress);
-	#endif
-	uint8_t r = i2c_master_write_to_reg16(p_platform->address, RegisterAdress, &value, 1);
-	return r;
+	return WrMulti(p_platform, RegisterAdress, &value, 1);
 }
 
 uint8_t WrMulti(
@@ -41,7 +33,14 @@ uint8_t WrMulti(
 		uint8_t *p_values,
 		uint32_t size)
 {
-    return i2c_master_write_to_reg16(p_platform->address, RegisterAdress, p_values, size);
+	#ifdef DO_DEBUG
+		ESP_LOGD(TAG, "[%02x] Writing %d bytes to %04x", p_platform->address, size, RegisterAdress);
+	#endif
+	uint8_t res = i2c_master_write_to_reg16(p_platform->address, RegisterAdress, p_values, size);
+	if (res != ESP_OK) {
+		ESP_LOGE(TAG, "I2C ERROR: %d", res);
+	}
+	return res;
 }
 
 uint8_t RdMulti(
@@ -50,7 +49,14 @@ uint8_t RdMulti(
 		uint8_t *p_values,
 		uint32_t size)
 {
-	return i2c_master_read_from_reg16(p_platform->address, RegisterAdress, p_values, size);
+	uint8_t res = i2c_master_read_from_reg16(p_platform->address, RegisterAdress, p_values, size);
+	#ifdef DO_DEBUG
+		ESP_LOGD(TAG, "[%02x] Read %02x to %04x", p_platform->address, *p_value, RegisterAdress);
+	#endif
+	if (res != ESP_OK) {
+		ESP_LOGE(TAG, "I2C ERROR: %d", res);
+	}
+	return res;
 }
 
 uint8_t Reset_Sensor(
@@ -63,10 +69,9 @@ void SwapBuffer(
 		uint8_t 		*buffer,
 		uint16_t 	 	 size)
 {
-	uint32_t i, tmp;
+	uint32_t tmp;
 
-	/* Example of possible implementation using <string.h> */
-	for (i = 0; i < size; i = i + 4)
+	for (uint32_t i = 0; i < size; i = i + 4)
 	{
 		tmp = (buffer[i] << 24) | (buffer[i + 1] << 16) | (buffer[i + 2] << 8) | (buffer[i + 3]);
 		memcpy(&(buffer[i]), &tmp, 4);

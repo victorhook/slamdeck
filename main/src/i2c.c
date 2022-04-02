@@ -28,7 +28,7 @@ SemaphoreHandle_t semaphore_i2c_master;
 static uint8_t i2c_cmd_link_buf[I2C_CMD_LINK_BUFF_SIZE];
 
 
-//#define DO_DEBUG
+#define DO_DEBUG
 #ifdef DO_DEBUG
 #define check_err(res) printf("Result: %s\n", esp_err_to_name(res))
 #else
@@ -87,41 +87,20 @@ static inline esp_err_t i2c_write_reg16_to_device(i2c_cmd_handle_t cmd, const ui
 		(address << 1) | I2C_MASTER_WRITE,
 		(uint8_t) (reg >> 8),
 		reg & 0xff};
-	#ifdef DO_DEBUG
-		ESP_LOGD(TAG, "i2c addr: %02x", (address << 1) | I2C_MASTER_WRITE);
-	#endif
+	//#ifdef DO_DEBUG
+	//	ESP_LOGD(TAG, "i2c addr: %02x", (address << 1) | I2C_MASTER_WRITE);
+	//#endif
 	return i2c_master_write(cmd, data, 3, I2C_ACK_CHECK_EN);
 }
 
 static esp_err_t i2c_master_read_chunk_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
 	xSemaphoreTake(semaphore_i2c_master, portMAX_DELAY);
-	
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create_static(i2c_cmd_link_buf, I2C_CMD_LINK_BUFF_SIZE);
     i2c_master_start(cmd);
     i2c_write_reg16_to_device(cmd, address, reg);
-	i2c_master_stop(cmd);
-	esp_err_t result = i2c_master_cmd_begin(I2C_BUS, cmd, I2C_MASTER_TIMEOUT/portTICK_PERIOD_MS);
-	i2c_cmd_link_delete_static(cmd);
 
-	check_err(result);
-	if (result != ESP_OK) {
-		check_err(result);
-		return result;
-	}
-
-	/*
-	#ifdef DO_DEBUG
-		fflush(stdout);
-		for (uint32_t i = 0; i < size; i++)
-			printf("%02x ", buf[i]);;
-		printf("\n");
-		printf("----------------------------------\n");
-	#endif
-	*/
-
-
-	cmd = i2c_cmd_link_create_static(i2c_cmd_link_buf, I2C_CMD_LINK_BUFF_SIZE);
+	// Repeated start in order to read
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, I2C_MASTER_ACK);
 	uint32_t last = size - 1;
@@ -130,10 +109,9 @@ static esp_err_t i2c_master_read_chunk_from_reg16(const uint8_t address, const u
 		i2c_master_read_byte(cmd, &buf[i], ack);
 	}
 	i2c_master_stop(cmd);
-	result = i2c_master_cmd_begin(I2C_BUS, cmd, I2C_MASTER_TIMEOUT/portTICK_PERIOD_MS);
+	esp_err_t result = i2c_master_cmd_begin(I2C_BUS, cmd, I2C_MASTER_TIMEOUT/portTICK_PERIOD_MS);
 	i2c_cmd_link_delete_static(cmd);
 
-	check_err(result);
 	xSemaphoreGive(semaphore_i2c_master);
 	return result;
 }
@@ -149,17 +127,7 @@ static esp_err_t i2c_master_write_chunk_to_reg16(const uint8_t address, const ui
     i2c_master_stop(cmd);
     esp_err_t result = i2c_master_cmd_begin(I2C_BUS, cmd, I2C_MASTER_TIMEOUT/portTICK_RATE_MS);
     i2c_cmd_link_delete_static(cmd);
-	check_err(result);
 
-	/*
-	#ifdef DO_DEBUG
-		fflush(stdout);
-		for (uint32_t i = 0; i < size; i++)
-			printf("%02x \n", buf[i]);;
-		printf("\n");
-		printf("----------------------------------\n");
-	#endif
-	*/
 	xSemaphoreGive(semaphore_i2c_master);
 	return result;
 }
@@ -184,9 +152,9 @@ int i2c_is_initialized()
 
 int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
-	#ifdef DO_DEBUG
-		printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
-	#endif
+	//#ifdef DO_DEBUG
+	//	printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
+	//#endif
 	uint16_t bytes_left = size;
 	uint16_t index = 0;
 	uint16_t chunk_size = 0;
@@ -200,8 +168,12 @@ int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_
 
 		err = i2c_master_read_chunk_from_reg16(address, reg+index, &buf[index], chunk_size);
 
-		if (err)
+		if (err) {
+			#ifdef DO_DEBUG
+				check_err(err);
+			#endif
 			return err;
+		}
 
 		bytes_left -= chunk_size;
 		index += chunk_size;
@@ -212,9 +184,9 @@ int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_
 
 int i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
-	#ifdef DO_DEBUG
-		printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
-    #endif
+	//#ifdef DO_DEBUG
+	//	printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
+    //#endif
 
 	uint16_t bytes_left = size;
 	uint16_t index = 0;
@@ -229,8 +201,12 @@ int i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t
 
 		err = i2c_master_write_chunk_to_reg16(address, reg+index, &buf[index], chunk_size);
 
-		if (err)
+		if (err) {
+			#ifdef DO_DEBUG
+				check_err(err);
+			#endif
 			return err;
+		}
 
 		bytes_left -= chunk_size;
 		index += chunk_size;
