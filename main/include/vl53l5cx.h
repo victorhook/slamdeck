@@ -37,6 +37,31 @@ typedef enum {
     RANGING_MODE_AUTONOMOUS = 3
 } VL53L5CX_ranging_mode_e;
 
+
+/*
+To have consistent data, the user needs to filter invalid target status. To give a confidence rating, a target with
+status 5 is considered as 100 % valid. A status of 6 or 9 can be considered with a confidence value of 50 %. All
+other statuses are below 50 % confidence level.
+*/
+typedef enum {
+    TARGET_STATUS_NOT_UPDATED                     = 0,  // Ranging data are not updated
+    TARGET_STATUS_SIGNAL_RATE_TOO_LOW_ON_SPAD     = 1,  // Signal rate too low on SPAD array
+    TARGET_STATUS_PHASE                           = 2,  // Target phase
+    TARGET_STATUS_SIGMA_TOO_HIGH                  = 3,  // Sigma estimator too high
+    TARGET_STATUS_TARGET_CONSISTENCY_FAILED       = 4,  // Target consistency failed
+    TARGET_STATUS_RANGE_VALID                     = 5,  // Range valid
+    TARGET_STATUS_WRAP_AROUND                     = 6,  // Wrap around not performed (Typically the first range)
+    TARGET_STATUS_RATE_CONSISTENCY_FAILED         = 7,  // Rate consistency failed
+    TARGET_STATUS_SIGNAL_RATE_TOO_LOW_FOR_TARGET  = 8,  // Signal rate too low for the current target
+    TARGET_STATUS_RANGE_VALID_BUT_LARGE_PULSE     = 9,  // Range valid with large pulse (may be due to a merged target)
+    TARGET_STATUS_RANGE_VALID_BUT_NO_TARGET       = 10, // Range valid, but no target detected at previous range
+    TARGET_STATUS_MEASUREMENT_CONSISTENCY_FAILED  = 11, // Measurement consistency failed
+    TARGET_STATUS_TARGET_BLURRED                  = 12, // Target blurred by another one, due to sharpener
+    TARGET_STATUS_TARGET_OK_BUT_INCONSISTENT_DATA = 13, // Target detected but inconsistent data. Frequently happens for secondary targets.
+    TARGET_STATUS_TARGET_NOT_DETECTED             = 255 // No target detected (only if number of target detected is enabled)
+} VL53L5CX_target_status_e;
+
+
 typedef struct {
     gpio_num_t              enable_pin;
     uint8_t                 enable_pin_initialized;
@@ -74,6 +99,7 @@ uint8_t VL53L5CX_stop(VL53L5CX_t* sensor);
 uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor);
 uint8_t VL53L5CX_data_ready(VL53L5CX_t* sensor);
 const VL53L5CX_ResultsData* VL53L5CX_get_data(VL53L5CX_t* sensor);
+uint16_t VL53L5CX_get_data_size(const VL53L5CX_t* sensor);
 /* --- Setters --- */
 uint8_t VL53L5CX_set_i2c_address(VL53L5CX_t* sensor, const uint8_t address);
 uint8_t VL53L5CX_set_power_mode(VL53L5CX_t* sensor, const VL53L5CX_power_mode_e power_mode);
