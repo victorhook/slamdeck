@@ -9,7 +9,7 @@ from slamdeck_python.cpx import BinaryPacket, CPX_Packet
 
 class SlamdeckCommand(IntEnum):
     GET_SENSOR_STATUS = 0
-    GET_DATA_FROM_SENSOR = 1
+    GET_DATA = 1
     GET_I2C_ADDRESS = 2
     SET_I2C_ADDRESS = 3
     GET_POWER_MODE = 4
@@ -37,7 +37,6 @@ class SlamdeckSensor(IntEnum):
     BACK    = 3
     LEFT    = 4
     NOT_SET = 0xff
-
 
 class VL53L5CX_Status(IntEnum):
     SENSOR_FAILED      = 0

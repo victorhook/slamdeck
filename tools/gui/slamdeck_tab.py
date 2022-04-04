@@ -40,18 +40,21 @@ class SensorDimension(IntEnum):
     DIMENSION_4X4 = 4
     DIMENSION_8X8 = 8
 
+N = 500
+cmap = LinearSegmentedColormap.from_list('rg',["r", "w", "g"], N=N)
+
 
 class SensorUi(QObject, Subscriber):
 
     _s_distance = pyqtSignal(np.ndarray)
-    cmap = LinearSegmentedColormap.from_list('rg',["r", "w", "g"], N=500)
+    colors = [QBrush(QColor(rgb2hex(cmap(value)))) for value in range(N+1)]
 
     def __init__(self, graphics: QGraphicsView, sensor: Sensor):
         QObject.__init__(self)
         self.graphics = graphics
         self.sensor = sensor
 
-        self.dimesion: SensorDimension = SensorDimension.DIMENSION_4X4
+        self.dimesion: SensorDimension = SensorDimension.DIMENSION_8X8
         self.scene = QGraphicsScene()
         self.graphics.setScene(self.scene)
         self.grids = self._create_grids()
@@ -69,25 +72,21 @@ class SensorUi(QObject, Subscriber):
         self.scene.clear()
         self.grids = self._create_grids()
 
-
     def on_change(self, value: np.ndarray) -> None:
         self._s_distance.emit(value)
 
     def _cb_distance(self, distances: np.ndarray) -> None:
-        global t0, received
-        t1 = time.time()
-        dt = t1 - t0
-        print(dt)
+        g = 0
 
-        received = True
-
-        row, col = self.dimesion
-        for r in range(row):
-            for c in range(col):
-                grid = self.grids[r][c]
-                value = distances[r+c]
-                grid.rect.setBrush(QBrush(QColor(rgb2hex(self.cmap(value)))))
+        for r in range(self.dimesion):
+            for c in range(self.dimesion):
+                grid = self.grids[self.dimesion-1-r][c]
+                value = distances[g]
+                color_value = N if value >= N else value
+                grid.rect.setBrush(self.colors[color_value])
+                #grid.rect.setBrush(QBrush(QColor(rgb2hex(self.cmap(value)))))
                 grid.text.setPlainText(str(value))
+                g += 1
 
     def _create_grids(self) -> t.List[t.List['Grid']]:
         grids: t.List[t.List['Grid']] = []
@@ -97,12 +96,12 @@ class SensorUi(QObject, Subscriber):
         for r in range(self.dimesion):
             grids.append([])
             for c in range(self.dimesion):
-                rect = QGraphicsRectItem(r*grid_size, c*grid_size,
+                rect = QGraphicsRectItem(c*grid_size, r*grid_size,
                                          grid_size, grid_size)
-                rect.setBrush(QBrush(QColor(rgb2hex(self.cmap(0)))))
+                rect.setBrush(self.colors[0])
                 self.scene.addItem(rect)
                 text = self.scene.addText(f'{r} {c}')
-                text.setPos(r*grid_size+grid_size/3, c*grid_size+grid_size/3)
+                text.setPos(c*grid_size+grid_size/3, r*grid_size+grid_size/3)
 
                 grids[r].append(self.Grid(rect, text))
 
@@ -136,24 +135,32 @@ class ContinousSamplingThread(Thread):
     def _received_response(self) -> bool:
         return self._has_received_response.is_set()
 
+    def _clear_response(self) -> bool:
+        return self._has_received_response.clear()
+
     def run(self) -> None:
         self._is_running.set()
-        logging.debug(f'Sampling thread started: {currentThread().getName()}')
+        logger.debug(f'Sampling thread started: {currentThread().getName()}')
 
         t0 = time.time()
         while self._is_running.is_set() and self._slamdeck.is_connected():
 
-            while not self._received_response():
-                pass
+            self._slamdeck.get_data_from_sensor(SlamdeckSensor.BACK)
 
             t1 = time.time()
             dt = t1 - t0
 
-            if (dt > self._max_delay) and received:
-                self.slamdeck.get_data_from_sensor(SlamdeckSensor.BACK)
-                t0 = t1
+            #if (dt > self._max_delay) and self._received_response():
+                #logger.debug('Requesting get data from sensor')
+            #    self._slamdeck.get_data_from_sensor(SlamdeckSensor.BACK)
+            #    t0 = t1
 
-        logging.debug('Sampling thread ended.')
+            while not self._received_response():
+                pass
+
+            self._clear_response()
+
+        logger.debug('Sampling thread ended.')
 
 
 class SlamdeckTab(Tab, example_tab_class):
@@ -251,7 +258,7 @@ class SlamdeckTab(Tab, example_tab_class):
         return int(self.editPort.text())
 
     def _set_default_values(self) -> None:
-        self.editIp.setText('192.168.1.73')
+        self.editIp.setText('192.168.6.83')
         self.editPort.setText('5000')
 
     def _set(self) -> None:
@@ -292,7 +299,7 @@ class SlamdeckTab(Tab, example_tab_class):
 
     def _start_sampling(self) -> None:
         if self._sampling_thread is not None:
-            logging.warning('Already running continous sampling')
+            logger.warning('Already running continous sampling')
             return
 
         self._sampling_thread = ContinousSamplingThread(self.slamdeck)
@@ -302,6 +309,9 @@ class SlamdeckTab(Tab, example_tab_class):
         self.slamdeck.get_data_from_sensor(SlamdeckSensor.BACK)
 
     def _connect(self) -> None:
+        self.i = 0
+        self.t0 = 0
+
         # TODO: Fix his private attribute access
         self.slamdeck._backend._ip = self._get_ip()
         self.slamdeck._backend._port = self._get_port()
@@ -312,12 +322,24 @@ class SlamdeckTab(Tab, example_tab_class):
         self.slamdeck.disconnect()
         if self._sampling_thread is not None:
             self._sampling_thread.stop()
+            self._sampling_thread = None
 
     # --- Callbacks -- #
     def _cb_on_new_data(self) -> None:
         # Notify samping thread that we've received the response
         if self._sampling_thread is not None:
             self._sampling_thread.received_response()
+            now = time.time()
+            if self.t0 == 0:
+                self.t0 = now
+
+            self.i += 1
+            dt = now - self.t0
+            if dt > 1:
+                print(self.i)
+                self.i = 0
+                self.t0 = now
+
 
     def _cb_connecting(self) -> None:
         logger.debug('Connecting...')
@@ -333,7 +355,7 @@ class SlamdeckTab(Tab, example_tab_class):
         elif sensor_tab == 'tabAllSensor':
             active_sensor = SlamdeckSensor.FRONT
         else:
-            logging.warning(f'Failed to recognize tab {sensor_tab}')
+            logger.warning(f'Failed to recognize tab {sensor_tab}')
 
         #self.slamdeck.get_initial_sensor_settings(active_sensor)
 

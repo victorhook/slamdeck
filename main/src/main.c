@@ -73,12 +73,14 @@ void app_main(void)
     //esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK Api", ESP_LOG_DEBUG);
-    esp_log_level_set("WIFI", ESP_LOG_DEBUG);
-    esp_log_level_set("COM", ESP_LOG_DEBUG);
+    //esp_log_level_set("WIFI", ESP_LOG_DEBUG);
+    //esp_log_level_set("COM", ESP_LOG_DEBUG);
     esp_log_level_set("UART", ESP_LOG_DEBUG);
-    esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
+    //esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set("Platform", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
+
+    esp_log_level_set("*", ESP_LOG_INFO);
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -94,12 +96,15 @@ void app_main(void)
 
     // Initialize esp APP transport before "com"
     espTransportInit();
-    //com_init();
-    //wifi_init();
-    //router_init();
-    //wifi_ctrl();
+    #ifndef DISABLED_WIFI_API
+        com_init();
+        wifi_init();
+        router_init();
+        wifi_ctrl();
+    #endif
     slamdeck_init();
 
-    led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
+    //test_vl53l5cx();
 
+    led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
 }

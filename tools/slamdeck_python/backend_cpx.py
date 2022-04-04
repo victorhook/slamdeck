@@ -55,6 +55,10 @@ class BackendCPX(Backend):
         size = struct.unpack('H', first_two_bytes)[0]
         # Next 2 bytes is the CPX header, and the remaining is the app data.
         data = self._backend.do_read(size)
+
+        if not data:
+            return
+
         return data[CPX_Packet.HEADER_SIZE:]
 
 

@@ -36,6 +36,11 @@ class MainUI(QtWidgets.QMainWindow, main_window_class):
         self.slamdeck = SlamdeckTab(self.tabs, None)
         self.tabs.addTab(self.slamdeck, "Slamdeck")
 
+        self._init()
+
+    def _init(self):
+        self.resize(1300, 900)
+
 
 def main():
     """

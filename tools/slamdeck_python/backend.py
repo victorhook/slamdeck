@@ -10,6 +10,8 @@ from queue import Queue
 
 from slamdeck_python.utils import BinaryPacket
 
+logger = logging.getLogger()
+
 
 class Callback:
 
@@ -88,7 +90,7 @@ class Backend(ABC):
 
     def start(self) -> Thread:
         if self._is_running.is_set():
-            logging.warning('Backend already running')
+            logger.warning('Backend already running')
             return None
 
         self._action_queue = Queue()
@@ -97,18 +99,19 @@ class Backend(ABC):
         return thread
 
     def stop(self) -> bool:
-        logging.debug('Stopping backend thread')
+        logger.debug('Stopping backend thread')
         if not self._is_running.is_set():
             self.cb_disconnected()
             return
 
-        self._is_running.clear()
         if self.do_stop():
             self.cb_disconnected()
         else:
             self.cb_connection_error('Failure during disconnect')
 
-    def write(self, data: BinaryPacket, bytes_to_read: int, on_complete: callable) -> None:
+        self._is_running.clear()
+
+    def write(self, data: BinaryPacket, on_complete: callable, bytes_to_read: int = 1) -> None:
         if not self._is_running.is_set():
             logging.warning('Can\'t write data when not connected!')
             return
@@ -149,8 +152,8 @@ class Backend(ABC):
 
         self.cb_connected()
         self._is_running.set()
-        logging.debug('Successful connect to backend')
-        logging.debug(f'Backend started in thread {currentThread().getName()}')
+        logger.debug('Successful connect to backend')
+        logger.debug(f'Backend started in thread {currentThread().getName()}')
 
         while self._is_running.is_set():
             action: Action = self._action_queue.get()
@@ -158,7 +161,7 @@ class Backend(ABC):
             self._read(action.bytes_to_read, action.on_complete)
 
     def _write(self, packet: BinaryPacket) -> None:
-        logging.debug(f'Writing {len(packet)} bytes')
+        #logger.debug(f'Writing {len(packet)} bytes')
         data = packet.as_bytes()
         # Put data to be sent to packet queue.
         SlamdeckPacketQueue.put_tx_packet(data)
@@ -166,7 +169,7 @@ class Backend(ABC):
 
     def _read(self, size: int, on_complete: callable) -> None:
         if size == 0:
-            logging.debug(f'0 bytes to read, not reading!')
+            logger.debug(f'0 bytes to read, not reading!')
             data = None
         else:
             data = self.do_read(size)
@@ -175,8 +178,8 @@ class Backend(ABC):
                 self.stop()
                 return
 
-            logging.debug(f'Reading {size} bytes: ' + \
-                          ' '.join(f'{byte:02x} ' for byte in data))
+            #logger.debug(f'Reading {size} bytes: ' + \
+            #              ' '.join(f'{byte:02x} ' for byte in data))
 
         # Put newly received data into rx queue.
         SlamdeckPacketQueue.put_rx_packet(data)

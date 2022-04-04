@@ -399,12 +399,12 @@ static void wifi_receiving_task(void *pvParameters) {
   while (1) {
     len = recv(conn, &rxp_wifi, 2, 0);
     if (len > 0) {
-      ESP_LOGI(TAG, "Wire data length %i", rxp_wifi.payloadLength);
+      ESP_LOGD(TAG, "Wire data length %i", rxp_wifi.payloadLength);
 
       int totalRxLen = 0;
       do {
         len = recv(conn, &rxp_wifi.payload[totalRxLen], rxp_wifi.payloadLength - totalRxLen, 0);
-        ESP_LOGI(TAG, "Read %i bytes", len);
+        ESP_LOGD(TAG, "Read %i bytes", len);
         totalRxLen += len;
       } while ((len > 0) && (totalRxLen < rxp_wifi.payloadLength));
       //ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp_wifi, 10, ESP_LOG_DEBUG);
@@ -446,9 +446,9 @@ void wifi_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK | START_UP_CTRL_TASK);
-  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 1, NULL);
-  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 1, NULL);
-  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 1, NULL);
+  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 3, NULL);
+  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 3, NULL);
+  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 3, NULL);
   ESP_LOGI(TAG, "Waiting for main, RX and TX tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK,
@@ -456,7 +456,7 @@ void wifi_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 1, NULL);
+  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 3, NULL);
   ESP_LOGI(TAG, "Waiting for CTRL task to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_CTRL_TASK,

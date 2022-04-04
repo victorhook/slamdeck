@@ -1,6 +1,7 @@
 import socket
 import logging
 
+logger = logging.getLogger()
 
 from slamdeck_python.backend import Backend
 
@@ -14,25 +15,25 @@ class BackendIp(Backend):
 
     def do_start(self) -> bool:
         if self._sock is not None:
-            logging.error('Already connected')
+            logger.error('Already connected')
             return False
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(1)
+        self._sock.settimeout(2)
         try:
-            logging.debug('Trying to connect')
+            logger.debug('Trying to connect')
             self._sock.connect(((self._ip, self._port)))
-        except OSError as e:
-            logging.debug(f'Failed to connect to BackendIP: "{e}"')
+        except Exception as e:
+            logger.debug(f'Failed to connect to BackendIP: "{e}"')
             return False
 
-        logging.debug(f'Connected to {self._ip} on port {self._port}')
+        logger.debug(f'Connected to {self._ip} on port {self._port}')
         self._sock.settimeout(None)
         return True
 
     def do_stop(self) -> bytes:
         if self._sock is None:
-            logging.error('Already disconnected from socket')
+            logger.error('Already disconnected from socket')
             return False
 
         self._sock.close()
@@ -41,20 +42,20 @@ class BackendIp(Backend):
 
     def do_write(self, data: bytes) -> int:
         if self._sock is None:
-            logging.error('Failed to write, not connected to socket')
+            logger.error('Failed to write, not connected to socket')
             return 0
 
         return self._sock.send(data)
 
     def do_read(self, size: int) -> bytes:
         if self._sock is None:
-            logging.error('Failed to read, not connected to socket')
+            logger.error('Failed to read, not connected to socket')
             return None
 
         try:
             return self._sock.recv(size)
         except ConnectionResetError as e:
-            logging.warning(f'Connection reset by peer: {e}')
+            logger.warning(f'Connection reset by peer: {e}')
             return None
 
 
