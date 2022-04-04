@@ -58,11 +58,13 @@ typedef enum {
     SLAMDECK_SENSOR_ID_RIGHT   = 2,
     SLAMDECK_SENSOR_ID_BACK    = 3,
     SLAMDECK_SENSOR_ID_LEFT    = 4,
-    SLAMDECK_SENSOR_ID_NOT_SET = 0xff,
+    SLAMDECK_SENSOR_ID_ALL     = 5,
+    SLAMDECK_SENSOR_ID_NOT_SET = 255,
 } slamdeck_sensor_id_e;
 
 
 #define START_UP_SLAMDECK_API_BIT BIT1
+#define SLAMDECK_API_TOTAL_COMMANDS 18
 
 
 void slamdeck_api_task();

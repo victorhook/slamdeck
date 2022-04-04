@@ -37,5 +37,7 @@
 
 #define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
 
+//#define DISABLED_WIFI_API
+
 /* --- Functions --- */
 void slamdeck_init();

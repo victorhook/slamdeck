@@ -49,143 +49,111 @@ static void cmd_handler_get_data(const slamdeck_packet_rx_t* rx, slamdeck_packet
     memcpy(tx->data, (uint8_t*) sensor->result.distance_mm, tx->size);
 }
 
-typedef uint8_t (*vl53l5cx_setter)(VL53L5CX_t* sensor, const uint8_t arg);
-static inline void cmd_handler_set_generic(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx, vl53l5cx_setter setter)
-{
-    tx->size = 1;
-    if (slamdeck_sensor_enabled(rx->sensor)) {
-        tx->data[0] = setter(rx->sensor, rx->data);
-    } else {
-        tx->data[0] = SLAMDECK_RESULT_SENSOR_NOT_ENABLED;
-    }
-}
-
-
-#define cmd_handler_get_generic(sensor, tx, setting)  \
-tx->size = 1;                                         \
-if (slamdeck_sensor_enabled(sensor)) {                \
-    tx->data[0] = setting;                            \
-} else {                                              \
-    tx->data[0] = SLAMDECK_RESULT_SENSOR_NOT_ENABLED; \
-}
-
-
-static void cmd_handler_set_i2c_address(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, VL53L5CX_set_i2c_address);
-}
-static void cmd_handler_get_i2c_address(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->i2c_address);
-}
-static void cmd_handler_get_power_mode(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->power_mode);
-}
-static void cmd_handler_set_power_mode(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, (vl53l5cx_setter) VL53L5CX_set_power_mode);
-}
-static void cmd_handler_get_resolution(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->resolution);
-}
-static void cmd_handler_set_resolution(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, (vl53l5cx_setter) VL53L5CX_set_resolution);
-}
-static void cmd_handler_get_ranging_frequency_hz(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->ranging_frequency_hz);
-}
-static void cmd_handler_set_ranging_frequency_hz(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, (vl53l5cx_setter) vl53l5cx_set_ranging_frequency_hz);
-}
-static void cmd_handler_get_integration_time_ms(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->integration_time_ms);
-}
-static void cmd_handler_set_integration_time_ms(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, vl53l5cx_set_integration_time_ms); // TODO: This expects uint32..
-}
-static void cmd_handler_get_sharpener_percent(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->sharpener_percent);
-}
-static void cmd_handler_set_sharpener_percent(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, VL53L5CX_set_sharpener_percent);
-}
-static void cmd_handler_get_target_order(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->target_order);
-}
-static void cmd_handler_set_target_order(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, (vl53l5cx_setter) VL53L5CX_set_target_order);
-}
-static void cmd_handler_get_ranging_mode(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_get_generic(rx->sensor, tx, slamdeck_get_sensor(rx->sensor)->ranging_mode);
-}
-static void cmd_handler_set_ranging_mode(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    cmd_handler_set_generic(rx, tx, (vl53l5cx_setter) VL53L5CX_set_ranging_mode);
-}
-
-static void cmd_handler_test(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
-{
-    ESP_LOGD(TAG, "Test!");
-    tx->size = 1;
-    tx->data[0] = SLAMDECK_RESULT_OK;
-}
-
-// Array of function pointers to command handlers.
-void (*command_handler[])(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*) = {
-    cmd_handler_test,
-    cmd_handler_get_data,
-    cmd_handler_get_i2c_address,
-    cmd_handler_set_i2c_address,
-    cmd_handler_get_power_mode,
-    cmd_handler_set_power_mode,
-    cmd_handler_get_resolution,
-    cmd_handler_set_resolution,
-    cmd_handler_get_ranging_frequency_hz,
-    cmd_handler_set_ranging_frequency_hz,
-    cmd_handler_get_integration_time_ms,
-    cmd_handler_set_integration_time_ms,
-    cmd_handler_get_sharpener_percent,
-    cmd_handler_set_sharpener_percent,
-    cmd_handler_get_target_order,
-    cmd_handler_set_target_order,
-    cmd_handler_get_ranging_mode,
-    cmd_handler_set_ranging_mode
-};
-
-typedef void (*cmd_handler)(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*);
-typedef void (*cmd_handler_array[])(const slamdeck_packet_rx_t*, slamdeck_packet_tx_t*);
-
-static const int TOTAL_COMMANDS = sizeof(command_handler) / sizeof(cmd_handler);
-
 int available_api_request()
 {
     return xQueueReceive(api_request_queue_rx, &rx, 0) == pdTRUE;
 }
 
+static uint16_t handle_sensor_request(const slamdeck_sensor_id_e sensor_id, const slamdeck_command_e command, const uint8_t* rx_data, uint8_t* tx_buf)
+{
+    if (!slamdeck_sensor_enabled(sensor_id)) {
+        tx_buf[0] = SLAMDECK_RESULT_SENSOR_NOT_ENABLED;
+        return;
+    }
+    VL53L5CX_t* sensor = slamdeck_get_sensor(sensor_id);
+
+    // Send packet to correct API command handler
+    uint16_t tx_length = 1;
+
+    switch (command) {
+        case SLAMDECK_GET_SENSOR_STATUS:
+            ESP_LOGD(TAG, "Test!");
+            tx_buf[0] = SLAMDECK_RESULT_OK;
+            break;
+        case SLAMDECK_GET_DATA:
+            tx_length = VL53L5CX_get_data_size(sensor);
+            ESP_LOGD(TAG, "Get data sensor %d, %d bytes", sensor->id, tx_length);
+            memcpy(tx_buf, (uint8_t*) sensor->result.distance_mm, tx_length);
+            break;
+        case SLAMDECK_GET_I2C_ADDRESS:
+            tx_buf[0] = VL53L5CX_get_i2c_address(sensor);
+            break;
+        case SLAMDECK_SET_I2C_ADDRESS:
+            tx_buf[0] = VL53L5CX_set_i2c_address(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_POWER_MODE:
+            tx_buf[0] = VL53L5CX_get_power_mode(sensor);
+            break;
+        case SLAMDECK_SET_POWER_MODE:
+            tx_buf[0] = VL53L5CX_set_power_mode(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_RESOLUTION:
+            tx_buf[0] = VL53L5CX_get_resolution(sensor);
+            break;
+        case SLAMDECK_SET_RESOLUTION:
+            tx_buf[0] = VL53L5CX_set_resolution(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_RANGING_FREQUENCY_HZ:
+            tx_buf[0] = VL53L5CX_get_ranging_frequency_hz(sensor);
+            break;
+        case SLAMDECK_SET_RANGING_FREQUENCY_HZ:
+            tx_buf[0] = VL53L5CX_set_ranging_frequency_hz(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_INTEGRATION_TIME_MS:
+            ((uint32_t*) tx_buf)[0] = VL53L5CX_get_integration_time_ms(sensor);
+            tx_length = 4;
+            break;
+        case SLAMDECK_SET_INTEGRATION_TIME_MS:
+            tx_buf[0] = VL53L5CX_set_integration_time_ms(sensor, (uint32_t) rx_data[0]);
+            break;
+        case SLAMDECK_GET_SHARPENER_PERCENT:
+            tx_buf[0] = VL53L5CX_get_sharpener_percent(sensor);
+            break;
+        case SLAMDECK_SET_SHARPENER_PERCENT:
+            tx_buf[0] = vl53l5cx_set_sharpener_percent(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_TARGET_ORDER:
+            tx_buf[0] = VL53L5CX_get_target_order(sensor);
+            break;
+        case SLAMDECK_SET_TARGET_ORDER:
+            tx_buf[0] = vl53l5cx_set_target_order(sensor, rx_data[0]);
+            break;
+        case SLAMDECK_GET_RANGING_MODE:
+            tx_buf[0] = VL53L5CX_get_ranging_mode(sensor);
+            break;
+        case SLAMDECK_SET_RANGING_MODE:
+            tx_buf[0] = vl53l5cx_set_ranging_mode(sensor, rx_data[0]);
+            break;
+    }
+
+    return tx_length;
+}
+
 void execute_api_request()
 {
+    uint16_t tx_size = 0;
+
     // Ensure we recognize the command
-    if ((rx.command < 0) || (rx.command >= TOTAL_COMMANDS)) {
+    if ((rx.command < 0) || (rx.command >= SLAMDECK_API_TOTAL_COMMANDS)) {
         // We don't know this command, let the receiver know.
         ESP_LOGW(TAG, "Failed to recognize command %d", rx.command);
-        tx.size = 1;
+        tx_size = 1;
         tx.data[0] = SLAMDECK_RESULT_COMMAND_INVALD;
     } else {
-        // Send packet to correct API command handler
-        command_handler[rx.command](&rx, &tx);
+
+        // Check if request is for all sensors, or just one.
+        if (rx.sensor == SLAMDECK_SENSOR_ID_ALL) {
+            for (int sensor_id = 0; sensor_id <= 4; sensor_id++) {
+                tx_size += handle_sensor_request(sensor_id, rx.command, &rx.data, &tx.data[tx_size]);
+            }
+        } else {
+            tx_size += handle_sensor_request(rx.sensor, rx.command, &rx.data, tx.data);
+
+        }
+
     }
+
+    tx.size = tx_size;
     xQueueSend(api_request_queue_tx, &tx, portMAX_DELAY);
 }
 
