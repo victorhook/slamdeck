@@ -71,8 +71,6 @@ void VL53L5CX_init_gpio(VL53L5CX_t* sensor)
     sensor->enable_pin_initialized = 1;
 }
 
-#include "i2c.h"
-
 uint8_t VL53L5CX_is_alive(VL53L5CX_t* sensor)
 {
     // First ping the i2c address to check if a sensor is available there.
@@ -288,24 +286,6 @@ typedef union {
 uint8_t VL53L5CX_set_resolution(VL53L5CX_t* sensor, const VL53L5CX_resolution_e resolution)
 {
     VL53L5CX_set_generic2(sensor, UINT8, vl53l5cx_set_resolution, &sensor->resolution, resolution);
-    /*
-    uint8_t require_restart = sensor->is_ranging;
-    uint8_t result;
-    if (require_restart)
-        result = VL53L5CX_stop(sensor);
-        if (result != VL53L5CX_STATUS_OK)
-            return VL53L5CX_STATUS_ERROR;
-
-    result = vl53l5cx_set_resolution(&sensor->config, resolution);
-    if (result == VL53L5CX_STATUS_OK)
-        sensor->resolution = resolution;
-
-    if (require_restart)
-        result = VL53L5CX_start(sensor);
-
-    return result;
-    //VL53L5CX_set_generic(sensor, &sensor->resolution, resolution, vl53l5cx_set_resolution);
-    */
 }
 uint8_t VL53L5CX_set_ranging_frequency_hz(VL53L5CX_t* sensor, const uint8_t ranging_frequency_hz)
 {
@@ -327,4 +307,36 @@ uint8_t VL53L5CX_set_target_order(VL53L5CX_t* sensor, const VL53L5CX_target_orde
 uint8_t VL53L5CX_set_ranging_mode(VL53L5CX_t* sensor, const VL53L5CX_ranging_mode_e ranging_mode)
 {
     VL53L5CX_set_generic(sensor, &sensor->ranging_mode, ranging_mode, vl53l5cx_set_ranging_mode);
+}
+uint8_t VL53L5CX_get_i2c_address(VL53L5CX_t* sensor)
+{
+    return sensor->i2c_address;
+}
+uint8_t VL53L5CX_get_power_mode(VL53L5CX_t* sensor)
+{
+    return sensor->power_mode;
+}
+uint8_t VL53L5CX_get_resolution(VL53L5CX_t* sensor)
+{
+    return sensor->resolution;
+}
+uint8_t VL53L5CX_get_ranging_frequency_hz(VL53L5CX_t* sensor)
+{
+    return sensor->ranging_frequency_hz;
+}
+uint32_t VL53L5CX_get_integration_time_ms(VL53L5CX_t* sensor)
+{
+    return sensor->integration_time_ms;
+}
+uint8_t VL53L5CX_get_sharpener_percent(VL53L5CX_t* sensor)
+{
+    return sensor->sharpener_percent;
+}
+uint8_t VL53L5CX_get_target_order(VL53L5CX_t* sensor)
+{
+    return sensor->target_order;
+}
+uint8_t VL53L5CX_get_ranging_mode(VL53L5CX_t* sensor)
+{
+    return sensor->ranging_mode;
 }

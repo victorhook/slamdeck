@@ -102,7 +102,7 @@ static uint8_t _vl53l5cx_poll_for_answer(
 		printf("\n");
 		*/
 
-		if(timeout >= (uint8_t)200)	{ /* 2s timeout */
+		if(timeout >= (uint8_t)5)	{ /* 2s timeout */
 			status |= (uint8_t)VL53L5CX_STATUS_TIMEOUT_ERROR;
 			ESP_LOGE(TAG, "VL53L5cx Timeout error");
 			break;

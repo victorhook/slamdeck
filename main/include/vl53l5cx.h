@@ -99,7 +99,18 @@ uint8_t VL53L5CX_stop(VL53L5CX_t* sensor);
 uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor);
 uint8_t VL53L5CX_data_ready(VL53L5CX_t* sensor);
 const VL53L5CX_ResultsData* VL53L5CX_get_data(VL53L5CX_t* sensor);
+
+/* --- Getters --- */
 uint16_t VL53L5CX_get_data_size(const VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_i2c_address(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_power_mode(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_resolution(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_ranging_frequency_hz(VL53L5CX_t* sensor);
+uint32_t VL53L5CX_get_integration_time_ms(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_sharpener_percent(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_target_order(VL53L5CX_t* sensor);
+uint8_t VL53L5CX_get_ranging_mode(VL53L5CX_t* sensor);
+
 /* --- Setters --- */
 uint8_t VL53L5CX_set_i2c_address(VL53L5CX_t* sensor, const uint8_t address);
 uint8_t VL53L5CX_set_power_mode(VL53L5CX_t* sensor, const VL53L5CX_power_mode_e power_mode);
