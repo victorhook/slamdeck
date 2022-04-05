@@ -27,8 +27,14 @@ class SlamdeckCommand(IntEnum):
     GET_RANGING_MODE = 16
     SET_RANGING_MODE = 17
 
-class SlamdeckResponse(IntEnum):
-    RESULT_OK = 0
+class SlamdeckResult(IntEnum):
+    OK                   = 0
+    TIMEOUT              = 1
+    COMMAND_INVALD       = 2
+    SENSOR_NOT_ENABLED   = 3
+    MCU_ERROR            = 66
+    INVALID_PARAM        = 127
+    ERROR                = 255
 
 class SlamdeckSensor(IntEnum):
     MAIN    = 0
@@ -36,7 +42,8 @@ class SlamdeckSensor(IntEnum):
     RIGHT   = 2
     BACK    = 3
     LEFT    = 4
-    NOT_SET = 0xff
+    ALL     = 5
+    NOT_SET = 255
 
 class VL53L5CX_Status(IntEnum):
     SENSOR_FAILED      = 0

@@ -24,13 +24,35 @@ class Observable:
         self._subscribers: t.Dict[str, Subscriber] = {}
         self._subscribers_all: t.List[Subscriber] = []
 
+    def _exists_in_dict(self, subscriber: Subscriber) -> t.Tuple[bool, str]:
+        for attr, sub in self._subscribers.items():
+            if sub == subscriber:
+                return True, attr
+        return False, None
+
+    def unsubscribe(self, subscriber: Subscriber) -> None:
+        exists, attr = self._exists_in_dict(subscriber)
+        if exists:
+            self._subscribers.pop(attr)
+            print('Unsubscribing!')
+        try:
+            self._subscribers_all.remove(subscriber)
+        except ValueError as e:
+            pass
+
     def subscribe(self, subscriber: Subscriber, attribute: str) -> None:
         subs = self._subscribers.get(attribute, [])
-        subs.append(subscriber)
+        if subscriber not in subs:
+            subs.append(subscriber)
+        else:
+            print('already subscribed!')
         self._subscribers[attribute] = subs
 
     def subscribe_to_all(self, subscriber: Subscriber) -> None:
-        self._subscribers_all.append(subscriber)
+        if subscriber not in self._subscribers_all:
+            self._subscribers_all.append(subscriber)
+        else:
+            print('already subscribed!')
 
     def notify_subscribers(self, attribute: str, value: object) -> None:
         for subscriber in self._subscribers_all:

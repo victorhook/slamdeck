@@ -12,7 +12,7 @@ from slamdeck_python.cpx import CPX_Packet
 from slamdeck_python.slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode, VL53L5CX_Resolution,
                           VL53L5CX_RangingMode, VL53L5CX_Status,
                           VL53L5CX_TargetOrder, SlamdeckCommand,
-                          SlamdeckResponse, SlamdeckSensor)
+                          SlamdeckResult, SlamdeckSensor)
 from slamdeck_python.utils import Observable, Subscriber
 
 logger = logging.getLogger()
@@ -27,14 +27,14 @@ class Sensor(Observable):
     """
     id:                   SlamdeckSensor
     data:                 np.ndarray           = None
-    i2C_address:          uint8                = 0x00
+    i2c_address:          uint8                = 0x00
     integration_time_ms:  uint32               = 0
     sharpener_percent:    uint8                = 0
     ranging_frequency_hz: uint8                = 0
     resolution:           VL53L5CX_Resolution  = VL53L5CX_Resolution.RESOLUTION_4X4
-    power_mode:           VL53L5CX_PowerMode   = 0
-    target_order:         VL53L5CX_TargetOrder = 0
-    ranging_mode:         VL53L5CX_RangingMode = 0
+    power_mode:           VL53L5CX_PowerMode   = VL53L5CX_PowerMode.POWER_MODE_WAKEUP
+    target_order:         VL53L5CX_TargetOrder = VL53L5CX_TargetOrder.TARGET_ORDER_CLOSEST
+    ranging_mode:         VL53L5CX_RangingMode = VL53L5CX_RangingMode.RANGING_MODE_AUTONOMOUS
 
     def __post_init__(self) -> None:
         super().__init__()
@@ -49,11 +49,19 @@ class Slamdeck:
         to handle the communication with the actual slamdeck.
     """
 
+    SENORS = [
+        SlamdeckSensor.MAIN,
+        SlamdeckSensor.FRONT,
+        SlamdeckSensor.RIGHT,
+        SlamdeckSensor.BACK,
+        SlamdeckSensor.LEFT,
+    ]
+
     def __init__(self, backend: Backend) -> None:
         self._backend = backend
         self._sensors = self._create_sensors()
 
-    def get_initial_sensor_settings(self, sensor: Sensor) -> Sensor:
+    def get_initial_sensor_settings(self, sensor: SlamdeckSensor) -> Sensor:
         if not self.is_connected():
             logging.error('Not connected yet')
             return None
@@ -65,80 +73,81 @@ class Slamdeck:
         self.get_resolution(sensor)
         self.get_sharpener_percent(sensor)
         self.get_target_order(sensor)
-        return sensor
+        return self.get_sensor_model(sensor)
+
 
     def _create_sensors(self) -> t.Dict[str, Sensor]:
         return {
-            SlamdeckSensor.MAIN:  Sensor(id=SlamdeckSensor.MAIN),
-            SlamdeckSensor.FRONT: Sensor(id=SlamdeckSensor.FRONT),
-            SlamdeckSensor.RIGHT: Sensor(id=SlamdeckSensor.RIGHT),
-            SlamdeckSensor.BACK:  Sensor(id=SlamdeckSensor.BACK),
-            SlamdeckSensor.LEFT:  Sensor(id=SlamdeckSensor.LEFT)
+            SlamdeckSensor.MAIN:  Sensor(id=SlamdeckSensor.MAIN, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
+            SlamdeckSensor.FRONT: Sensor(id=SlamdeckSensor.FRONT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
+            SlamdeckSensor.RIGHT: Sensor(id=SlamdeckSensor.RIGHT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
+            SlamdeckSensor.BACK:  Sensor(id=SlamdeckSensor.BACK, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
+            SlamdeckSensor.LEFT:  Sensor(id=SlamdeckSensor.LEFT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8)
         }
 
-    def get_sensor(self, sensor: SlamdeckSensor) -> Sensor:
+    def get_sensor_model(self, sensor: SlamdeckSensor) -> Sensor:
         return self._sensors.get(sensor, None)
 
     # --- Commands --- #
 
     # -- I2C address -- #
-    def get_i2c_address(self, sensor: Sensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_I2C_ADDRESS, sensor, 'i2C_address')
+    def get_i2c_address(self, sensor: SlamdeckSensor) -> None:
+        self._cmd_execute(SlamdeckCommand.GET_I2C_ADDRESS, sensor, 'i2c_address')
 
-    def set_i2c_address(self, sensor: Sensor, i2C_address: uint8) -> None:
-        if i2C_address > 127:
-            logging.error(f'Can\t set i2c address of {i2C_address}. It must be less than 127.')
+    def set_i2c_address(self, sensor: SlamdeckSensor, i2c_address: uint8) -> None:
+        if i2c_address > 127:
+            logging.error(f'Can\t set i2c address of {i2c_address}. It must be less than 127.')
             return
-        self._cmd_execute(SlamdeckCommand.SET_I2C_ADDRESS, sensor, 'i2C_address', i2C_address)
+        self._cmd_execute(SlamdeckCommand.SET_I2C_ADDRESS, sensor, 'i2c_address', i2c_address)
 
     # -- Power mode -- #
-    def get_power_mode(self, sensor: Sensor) -> None:
+    def get_power_mode(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_POWER_MODE, sensor, 'power_mode')
 
-    def set_power_mode(self, sensor: Sensor, power_mode: VL53L5CX_PowerMode) -> None:
+    def set_power_mode(self, sensor: SlamdeckSensor, power_mode: VL53L5CX_PowerMode) -> None:
         self._cmd_execute(SlamdeckCommand.SET_POWER_MODE, sensor, 'power_mode', power_mode)
 
     # -- Resolution -- #
-    def get_resolution(self, sensor: Sensor) -> None:
+    def get_resolution(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_RESOLUTION, sensor, 'resolution')
 
-    def set_resolution(self, sensor: Sensor, resolution: VL53L5CX_Resolution) -> None:
+    def set_resolution(self, sensor: SlamdeckSensor, resolution: VL53L5CX_Resolution) -> None:
         self._cmd_execute(SlamdeckCommand.SET_RESOLUTION, sensor, 'resolution', resolution)
 
     # -- Ranging -- #
-    def get_ranging_frequency_hz(self, sensor: Sensor) -> None:
+    def get_ranging_frequency_hz(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_RANGING_FREQUENCY_HZ, sensor, 'ranging_frequency_hz')
 
-    def set_ranging_frequency_hz(self, sensor: Sensor, ranging_frequency_hz: uint8) -> None:
+    def set_ranging_frequency_hz(self, sensor: SlamdeckSensor, ranging_frequency_hz: uint8) -> None:
         self._cmd_execute(SlamdeckCommand.SET_RANGING_FREQUENCY_HZ, sensor, 'ranging_frequency_hz', ranging_frequency_hz)
 
     # -- Integration time -- #
-    def get_integration_time_ms(self, sensor: Sensor) -> None:
+    def get_integration_time_ms(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_INTEGRATION_TIME_MS, sensor, 'integration_time_ms')
 
-    def set_integration_time_ms(self, sensor: Sensor, integration_time_ms: uint32) -> None:
+    def set_integration_time_ms(self, sensor: SlamdeckSensor, integration_time_ms: uint32) -> None:
         self._cmd_execute(SlamdeckCommand.SET_INTEGRATION_TIME_MS, sensor, 'integration_time_ms', integration_time_ms)
 
     # -- Sharpener precent -- #
-    def get_sharpener_percent(self, sensor: Sensor) -> None:
+    def get_sharpener_percent(self, sensor: SlamdeckSensor) -> None:
         print('get!')
         self._cmd_execute(SlamdeckCommand.GET_SHARPENER_PERCENT, sensor, 'sharpener_percent')
 
-    def set_sharpener_percent(self, sensor: Sensor, sharpener_percent: uint8) -> None:
+    def set_sharpener_percent(self, sensor: SlamdeckSensor, sharpener_percent: uint8) -> None:
         self._cmd_execute(SlamdeckCommand.SET_SHARPENER_PERCENT, sensor, 'sharpener_percent', sharpener_percent)
 
     # -- Target order -- #
-    def get_target_order(self, sensor: Sensor) -> None:
+    def get_target_order(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_TARGET_ORDER, sensor, 'target_order')
 
-    def set_target_order(self, sensor: Sensor, target_order: uint8) -> None:
+    def set_target_order(self, sensor: SlamdeckSensor, target_order: uint8) -> None:
         self._cmd_execute(SlamdeckCommand.SET_TARGET_ORDER, sensor, 'target_order', target_order)
 
     # -- Ranging mode -- #
-    def get_ranging_mode(self, sensor: Sensor) -> None:
+    def get_ranging_mode(self, sensor: SlamdeckSensor) -> None:
         self._cmd_execute(SlamdeckCommand.GET_RANGING_MODE, sensor, 'ranging_mode')
 
-    def set_ranging_mode(self, sensor: Sensor, ranging_mode: VL53L5CX_RangingMode) -> None:
+    def set_ranging_mode(self, sensor: SlamdeckSensor, ranging_mode: VL53L5CX_RangingMode) -> None:
         self._cmd_execute(SlamdeckCommand.SET_RANGING_MODE, sensor, 'ranging_mode', ranging_mode)
 
     def get_data_from_sensor(self, sensor: SlamdeckSensor) -> None:
@@ -171,51 +180,112 @@ class Slamdeck:
     def add_cb_on_new_data(self, callback: Callback) -> None:
         self._backend.cb_on_new_data.add_callback(callback)
 
-    def _cmd_on_complete(self,
-                             command: SlamdeckCommand,
-                             sensor: SlamdeckSensor,
-                             attribute: str,
-                             value: object
-            ) -> None:
-        # Update the sensor model
-        sensor = self._sensors[sensor]
+    def _is_getter(self, command: SlamdeckCommand) -> None:
+        return command in [
+            SlamdeckCommand.GET_SENSOR_STATUS,
+            SlamdeckCommand.GET_DATA,
+            SlamdeckCommand.GET_I2C_ADDRESS,
+            SlamdeckCommand.GET_POWER_MODE,
+            SlamdeckCommand.GET_RESOLUTION,
+            SlamdeckCommand.GET_RANGING_FREQUENCY_HZ,
+            SlamdeckCommand.GET_INTEGRATION_TIME_MS,
+            SlamdeckCommand.GET_SHARPENER_PERCENT,
+            SlamdeckCommand.GET_TARGET_ORDER,
+            SlamdeckCommand.GET_RANGING_MODE,
+        ]
 
+    def get_data_size(self, sensor: Sensor) -> int:
+        return sensor.resolution * 2
+
+    def _update_sensor_model(self,
+                             command: SlamdeckCommand,
+                             sensor: Sensor,
+                             attribute: str,
+                             result: bytes,
+                             data_sent: bytes = None
+            ) -> int:
+        """
+            Returns how many bytes of the result that is used.
+        """
+        result_size = 1
+
+        # Check for getters
         if command == SlamdeckCommand.GET_SENSOR_STATUS:
             pass
         elif command == SlamdeckCommand.GET_DATA:
-            value = np.frombuffer(value, dtype=np.uint16)
+            value = np.frombuffer(result, dtype=np.uint16)
         elif command == SlamdeckCommand.GET_I2C_ADDRESS:
-            value = ord(value)
+            value = ord(result)
         elif command == SlamdeckCommand.GET_POWER_MODE:
-            value = VL53L5CX_PowerMode(ord(value))
+            value = VL53L5CX_PowerMode(ord(result))
         elif command == SlamdeckCommand.GET_RESOLUTION:
-            value = VL53L5CX_Resolution(ord(value))
+            value = VL53L5CX_Resolution(ord(result))
         elif command == SlamdeckCommand.GET_RANGING_FREQUENCY_HZ:
-            value = ord(value)
+            value = ord(result)
         elif command == SlamdeckCommand.GET_INTEGRATION_TIME_MS:
-            value = struct.unpack('I', value)
+            value = struct.unpack('I', result)[0]
+            result_size = 4
         elif command == SlamdeckCommand.GET_SHARPENER_PERCENT:
-            value = ord(value)
+            value = ord(result)
         elif command == SlamdeckCommand.GET_TARGET_ORDER:
-            value = VL53L5CX_TargetOrder(ord(value))
+            value = VL53L5CX_TargetOrder(ord(result))
         elif command == SlamdeckCommand.GET_RANGING_MODE:
-            value = VL53L5CX_RangingMode(ord(value))
+            value = VL53L5CX_RangingMode(ord(result))
+        else:
+            # Not getters, must be a setter request.
 
-            """
-            field_types = {field.name: field.type for field in fields(Sensor)}
-            field_type = field_types.get(attribute, str)
-
-            print(field_type, value)
-            if len(value) == 1:
-                value = ord(value)
-            elif len(value) == 4:
-                value = struct.unpack('I', value)
-            """
+            # If not OK result, return error.
+            if ord(result) != SlamdeckResult.OK.value:
+                logging.error(f'Slamdeck result error: {result}')
+                result_size = 1
+                return
+            else:
+                if command == SlamdeckCommand.SET_I2C_ADDRESS:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_POWER_MODE:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_RESOLUTION:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_RANGING_FREQUENCY_HZ:
+                    value = ord(data_sent)
+                elif command == SlamdeckCommand.SET_INTEGRATION_TIME_MS:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_SHARPENER_PERCENT:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_TARGET_ORDER:
+                    value = data_sent
+                elif command == SlamdeckCommand.SET_RANGING_MODE:
+                    value = data_sent
 
         setattr(sensor, attribute, value)
 
         # Notify sensor subscribers
-        sensor.notify_subscribers(attribute, value)
+        if command == SlamdeckCommand.GET_DATA:
+            sensor.notify_subscribers(attribute, None)
+        else:
+            sensor.notify_subscribers(attribute, value)
+
+        return result_size
+
+    def _cmd_on_complete(self,
+                         command: SlamdeckCommand,
+                         sensor: SlamdeckSensor,
+                         attribute: str,
+                         result: bytes,
+                         data_sent: bytes = None
+            ) -> None:
+
+        if sensor == SlamdeckSensor.ALL:
+            sensors = self.SENORS
+        else:
+            sensors = [sensor]
+
+        result_offset = 0
+        for sensor in sensors:
+            sensor_model = self.get_sensor_model(sensor)
+            result_size = self.get_data_size(sensor_model)
+            self._update_sensor_model(command, sensor_model, attribute, result[result_offset:result_offset+result_size], data_sent)
+            result_offset += result_size
 
     def _cmd_execute(self,
                      command: SlamdeckCommand,
@@ -232,8 +302,7 @@ class Slamdeck:
             sensor=sensor,
             data=data
         )
-
         def _on_complete(result):
-            self._cmd_on_complete(command, sensor, attribute, result)
+            self._cmd_on_complete(command, sensor, attribute, result, data)
 
         self._backend.write(packet, _on_complete)

@@ -374,6 +374,13 @@
                  </property>
                 </widget>
                </item>
+               <item row="9" column="0">
+                <widget class="QPushButton" name="btnUpdateConfig">
+                 <property name="text">
+                  <string>Update</string>
+                 </property>
+                </widget>
+               </item>
               </layout>
              </widget>
             </item>
@@ -383,7 +390,7 @@
          <item>
           <widget class="QTabWidget" name="tabSensorGraphics">
            <property name="currentIndex">
-            <number>0</number>
+            <number>1</number>
            </property>
            <widget class="QWidget" name="tabSingleSensor">
             <attribute name="title">
@@ -503,6 +510,23 @@
         <layout class="QVBoxLayout" name="verticalLayout_4">
          <item>
           <widget class="QGraphicsView" name="graphics2dVisualizer"/>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="tab_2">
+        <attribute name="title">
+         <string>3D Visualizer</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_5">
+         <item>
+          <widget class="QFrame" name="graphics3dVisualizer">
+           <property name="frameShape">
+            <enum>QFrame::StyledPanel</enum>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+          </widget>
          </item>
         </layout>
        </widget>

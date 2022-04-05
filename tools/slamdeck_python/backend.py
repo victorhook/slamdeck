@@ -48,6 +48,10 @@ class Action:
         self.on_complete = on_complete
 
 
+class ActionStop:
+    pass
+
+
 class SlamdeckPacketQueue:
 
     __queue_rx = Queue()
@@ -104,12 +108,7 @@ class Backend(ABC):
             self.cb_disconnected()
             return
 
-        if self.do_stop():
-            self.cb_disconnected()
-        else:
-            self.cb_connection_error('Failure during disconnect')
-
-        self._is_running.clear()
+        self._action_queue.put(ActionStop())
 
     def write(self, data: BinaryPacket, on_complete: callable, bytes_to_read: int = 1) -> None:
         if not self._is_running.is_set():
@@ -157,8 +156,17 @@ class Backend(ABC):
 
         while self._is_running.is_set():
             action: Action = self._action_queue.get()
-            self._write(action.data_to_write)
-            self._read(action.bytes_to_read, action.on_complete)
+
+            if isinstance(action, ActionStop):
+                if self.do_stop():
+                    self.cb_disconnected()
+                else:
+                    self.cb_connection_error('Failure during disconnect')
+
+                self._is_running.clear()
+            else:
+                self._write(action.data_to_write)
+                self._read(action.bytes_to_read, action.on_complete)
 
     def _write(self, packet: BinaryPacket) -> None:
         #logger.debug(f'Writing {len(packet)} bytes')
