@@ -46,6 +46,13 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QPushButton" name="btnStopSampling">
+         <property name="text">
+          <string>Stop sampling</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
@@ -127,7 +134,7 @@
      <item>
       <widget class="QTabWidget" name="mainTabs">
        <property name="currentIndex">
-        <number>0</number>
+        <number>3</number>
        </property>
        <widget class="QWidget" name="tabSensors">
         <attribute name="title">
