@@ -73,7 +73,7 @@ static uint16_t handle_sensor_request(const slamdeck_sensor_id_e sensor_id, cons
         case SLAMDECK_GET_DATA:
             tx_length = VL53L5CX_get_data_size(sensor);
             ESP_LOGD(TAG, "Get data sensor %d, %d bytes", sensor->id, tx_length);
-            memcpy(tx_buf, (uint8_t*) sensor->result.distance_mm, tx_length);
+            memcpy(tx_buf, (uint8_t*) sensor->data_distance_mm, tx_length);
             break;
         case SLAMDECK_GET_I2C_ADDRESS:
             tx_buf[0] = VL53L5CX_get_i2c_address(sensor);

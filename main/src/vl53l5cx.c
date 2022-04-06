@@ -15,6 +15,7 @@
 #define IS_NOT_RANGING 0
 
 #define VL53L5CX_DEFAULT_I2C_ADDRESS_7_BIT 0x29
+#define VL53L5CX_MAX_DISTANCE_MM 4000
 
 #define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
 
@@ -185,6 +186,21 @@ uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor)
     if (res == VL53L5CX_STATUS_OK) {
         sensor->last_sample = get_current_time();
         sensor->samples++;
+
+        // Filter data if needed.
+        for (int grid = 0; grid < sensor->resolution; grid++) {
+            switch (sensor->result.target_status[grid]) {
+                case TARGET_STATUS_TARGET_NOT_DETECTED:
+                    sensor->data_distance_mm[grid] = VL53L5CX_MAX_DISTANCE_MM;
+                    break;
+                case TARGET_STATUS_NOT_UPDATED:
+                    // Don't do anything here, TODO make it nicer.
+                    break;
+                default:
+                    sensor->data_distance_mm[grid] = sensor->result.distance_mm[grid];
+                    break;
+            }
+        }
     }
     return res;
 }
@@ -219,95 +235,90 @@ uint8_t VL53L5CX_stop(VL53L5CX_t* sensor)
 
 
 /* --- VL53L5CX API --- */
-
-// Generic setter function that calls the low level vl53l5cx driver setter, which
-// tries to set the given value. If this return successfully, we also update the sensor struct model.
-#define VL53L5CX_set_generic(sensor, member_ptr, arg, setter) \
-    uint8_t require_restart = sensor->is_ranging; \
-    if (require_restart) \
-        VL53L5CX_stop(sensor); \
-    uint8_t res = setter(&sensor->config, arg); \
-    if (res == VL53L5CX_STATUS_OK) \
-        *member_ptr = arg; \
-    if (require_restart) \
-        VL53L5CX_start(sensor); \
-    return res
-
-uint8_t VL53L5CX_set_i2c_address(VL53L5CX_t* sensor, const uint8_t address)
-{
-    return vl53l5cx_set_i2c_address(&sensor->config, address);
-}
-uint8_t VL53L5CX_set_power_mode(VL53L5CX_t* sensor, const VL53L5CX_power_mode_e power_mode)
-{
-    VL53L5CX_set_generic(sensor, &sensor->power_mode, power_mode, vl53l5cx_set_power_mode);
-}
-
 typedef enum {
     UINT8,
     UINT32
 } VL53L5CX_setter_type_e;
 
 typedef union {
-    uint8_t*  u8;
-    uint32_t* u32;
-} VL53L5CX_setter_arg_t;
+  uint32_t (*u8)(VL53L5CX_Configuration*, uint8_t);
+  uint32_t (*u32)(VL53L5CX_Configuration*, uint32_t);
+} setter_function_u;
 
-#define VL53L5CX_set_generic2(sensor, setter_type, setter, member, arg) \
-    uint8_t require_restart = sensor->is_ranging; \
-    uint8_t result; \
-    if (require_restart) { \
-        result = VL53L5CX_stop(sensor); \
-        if (result != VL53L5CX_STATUS_OK) \
-            return result; \
-    } \
-    switch (setter_type) { \
-        case UINT8: \
-            result = setter(&sensor->config, (uint8_t) arg); \
-            if (result == VL53L5CX_STATUS_OK) \
-                *((uint8_t*) member) = arg; \
-            break; \
-        case UINT32: \
-            result = setter(&sensor->config, (uint32_t) arg); \
-            if (result == VL53L5CX_STATUS_OK) \
-                *((uint32_t*) member) = arg; \
-            break; \
-    } \
- \
-    if (result != VL53L5CX_STATUS_OK) {  \
-        ESP_LOGW(TAG, "Failed to set config, error: %d", result); \
-        return result; \
-    } \
- \
-    if (require_restart) \
-        result = VL53L5CX_start(sensor); \
- \
+typedef uint8_t (*setter_function_u8)(uint8_t);
+typedef uint32_t (*setter_function_u32)(uint32_t);
+
+// Generic setter function that calls the low level vl53l5cx driver setter, which
+// tries to set the given value. If this return successfully, we also update the sensor struct model.
+static uint8_t VL53L5CX_set_generic(VL53L5CX_t* sensor, setter_function_u setter, const VL53L5CX_setter_type_e setter_type, uint8_t* member, const uint8_t* arg)
+{
+    uint8_t require_restart = sensor->is_ranging;
+    uint32_t result = VL53L5CX_STATUS_OK;
+
+    if (require_restart) {
+        result = VL53L5CX_stop(sensor);
+        if (result != VL53L5CX_STATUS_OK)
+            return result;
+    }
+    switch (setter_type) {
+        case UINT8:
+            result = setter.u8(&sensor->config, *arg);
+            if (result == VL53L5CX_STATUS_OK)
+                *member = *arg;
+            break;
+        case UINT32:
+            result = setter.u32(&sensor->config, (uint32_t) *arg);
+            if (result == VL53L5CX_STATUS_OK)
+                *((uint32_t*) member) = *arg;
+            break;
+    }
+
+    if (result != VL53L5CX_STATUS_OK) {
+        ESP_LOGW(TAG, "Failed to set config, error: %d", result);
+        return result;
+    }
+
+    if (require_restart)
+        result = VL53L5CX_start(sensor);
+
     return result;
+}
 
+/* --- Setters --- */
+uint8_t VL53L5CX_set_i2c_address(VL53L5CX_t* sensor, const uint8_t i2c_address)
+{
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_i2c_address}, UINT8, &sensor->i2c_address, &i2c_address);
+}
+uint8_t VL53L5CX_set_power_mode(VL53L5CX_t* sensor, const VL53L5CX_power_mode_e power_mode)
+{
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_power_mode}, UINT8, &sensor->power_mode, &power_mode);
+}
 uint8_t VL53L5CX_set_resolution(VL53L5CX_t* sensor, const VL53L5CX_resolution_e resolution)
 {
-    VL53L5CX_set_generic2(sensor, UINT8, vl53l5cx_set_resolution, &sensor->resolution, resolution);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_resolution}, UINT8, &sensor->resolution, &resolution);
 }
 uint8_t VL53L5CX_set_ranging_frequency_hz(VL53L5CX_t* sensor, const uint8_t ranging_frequency_hz)
 {
-    VL53L5CX_set_generic2(sensor, UINT8, vl53l5cx_set_ranging_frequency_hz, &sensor->ranging_frequency_hz, ranging_frequency_hz);
-    //VL53L5CX_set_generic(sensor, &sensor->ranging_frequency_hz, ranging_frequency_hz, vl53l5cx_set_ranging_frequency_hz);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_ranging_frequency_hz}, UINT8, &sensor->ranging_frequency_hz, &ranging_frequency_hz);
 }
 uint8_t VL53L5CX_set_integration_time_ms(VL53L5CX_t* sensor, const uint32_t integration_time_ms)
 {
-    VL53L5CX_set_generic(sensor, &sensor->integration_time_ms, integration_time_ms, vl53l5cx_set_integration_time_ms);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u32=vl53l5cx_set_integration_time_ms}, UINT32, (uint8_t*) &sensor->integration_time_ms, (uint8_t*) &integration_time_ms);
 }
 uint8_t VL53L5CX_set_sharpener_percent(VL53L5CX_t* sensor, const uint8_t sharpener_percent)
 {
-    VL53L5CX_set_generic(sensor, &sensor->sharpener_percent, sharpener_percent, vl53l5cx_set_sharpener_percent);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_sharpener_percent}, UINT8, &sensor->sharpener_percent, &sharpener_percent);
 }
 uint8_t VL53L5CX_set_target_order(VL53L5CX_t* sensor, const VL53L5CX_target_order_e target_order)
 {
-    VL53L5CX_set_generic(sensor, &sensor->target_order, target_order, vl53l5cx_set_target_order);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_target_order}, UINT8, &sensor->target_order, &target_order);
 }
 uint8_t VL53L5CX_set_ranging_mode(VL53L5CX_t* sensor, const VL53L5CX_ranging_mode_e ranging_mode)
 {
-    VL53L5CX_set_generic(sensor, &sensor->ranging_mode, ranging_mode, vl53l5cx_set_ranging_mode);
+    return VL53L5CX_set_generic(sensor, (setter_function_u) {.u8=vl53l5cx_set_ranging_mode}, UINT8, &sensor->ranging_mode, &ranging_mode);
 }
+
+/* --- Getters --- */
 uint8_t VL53L5CX_get_i2c_address(VL53L5CX_t* sensor)
 {
     return sensor->i2c_address;
