@@ -26,7 +26,7 @@ class Sensor(Observable):
         to subscribe to any change that happens to the sensor state.
     """
     id:                   SlamdeckSensor
-    data:                 np.ndarray           = None
+    data:                 np.ndarray           = np.ones(128, dtype=np.uint16)
     i2c_address:          uint8                = 0x00
     integration_time_ms:  uint32               = 0
     sharpener_percent:    uint8                = 0
@@ -60,6 +60,7 @@ class Slamdeck:
     def __init__(self, backend: Backend) -> None:
         self._backend = backend
         self._sensors = self._create_sensors()
+        self._is_sampling: bool = False
 
     def get_initial_sensor_settings(self, sensor: SlamdeckSensor) -> Sensor:
         if not self.is_connected():
@@ -74,7 +75,6 @@ class Slamdeck:
         self.get_sharpener_percent(sensor)
         self.get_target_order(sensor)
         return self.get_sensor_model(sensor)
-
 
     def _create_sensors(self) -> t.Dict[str, Sensor]:
         return {
@@ -155,11 +155,20 @@ class Slamdeck:
         #bytes_to_read = (sensor.resolution * 2) + SlamdeckApiPacket.HEADER_SIZE
         self._cmd_execute(SlamdeckCommand.GET_DATA, sensor, 'data')
 
+    # -- Other functions -- #
+    def start_sampling(self, sensor: SlamdeckSensor) -> None:
+        self._is_sampling = True
+        self.get_data_from_sensor(sensor)
+
+    def stop_sampling(self) -> None:
+        self._is_sampling = False
+
     def connect(self) -> Thread:
         return self._backend.start()
 
     def disconnect(self) -> None:
         self._backend.stop()
+        self._is_sampling = False
 
     def is_connected(self) -> bool:
         return self._backend.is_connected()
@@ -286,6 +295,11 @@ class Slamdeck:
             result_size = self.get_data_size(sensor_model)
             self._update_sensor_model(command, sensor_model, attribute, result[result_offset:result_offset+result_size], data_sent)
             result_offset += result_size
+
+        # If we're continously sampling, we request new data immediately.
+        if self._is_sampling:
+            if command == SlamdeckCommand.GET_DATA:
+                self._cmd_execute(SlamdeckCommand.GET_DATA, sensor, attribute)
 
     def _cmd_execute(self,
                      command: SlamdeckCommand,

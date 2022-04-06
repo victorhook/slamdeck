@@ -7,6 +7,7 @@ import typing as t
 from threading import Thread, Event, currentThread
 import logging
 from queue import Queue
+import time
 
 from slamdeck_python.utils import BinaryPacket
 
@@ -165,8 +166,12 @@ class Backend(ABC):
 
                 self._is_running.clear()
             else:
+                t0 = time.time()
                 self._write(action.data_to_write)
+                #print('w', (time.time() - t0)*1000, end=' ')
+                t0 = time.time()
                 self._read(action.bytes_to_read, action.on_complete)
+                #print('r', (time.time() - t0)*1000)
 
     def _write(self, packet: BinaryPacket) -> None:
         #logger.debug(f'Writing {len(packet)} bytes')
