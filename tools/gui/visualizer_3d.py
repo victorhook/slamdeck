@@ -95,8 +95,8 @@ class Visualizer3d(scene.SceneCanvas):
 
     FPS = 60
     FOV = 45
-    MAX_DISTANCE_CM = 300
-    cmap = LinearSegmentedColormap.from_list('rg',["r", "w", "g"], N=MAX_DISTANCE_CM)
+    MAX_DISTANCE = 4000
+    cmap = LinearSegmentedColormap.from_list('rg',["r", "w", "g"], N=MAX_DISTANCE)
 
     TEXT_OFFSET = np.array((0.0, 0, 0.25))
 
@@ -163,39 +163,35 @@ class Visualizer3d(scene.SceneCanvas):
         self.t0 = time.time()
 
     def _get_color(self, distance: float) -> np.array:
-        return self.cmap(distance)
+        if distance == self.MAX_DISTANCE:
+            return np.array([0, 0, 0, 1])
+        else:
+            return self.cmap(distance)
 
     def _set_coordinate(self,
-                        distance: float,
+                        distance: int,
                         row: int,
                         col: int,
                         coordinate: np.array
             ) -> np.array:
-        x_axis = np.array([1, 0, 0])
+        if distance >= self.MAX_DISTANCE:
+            rot = np.array([0, 0, 0])
+        else:
+            x_axis = np.array([1, 0, 0])
 
-        grid_pad = 1 / self.grid_size
+            grid_pad = 1 / self.grid_size
 
-        rot = np.array([
-            1,
-            grid_pad * ( col - (self.grid_size/2)+0.5 ),
-            grid_pad * ( row - (self.grid_size/2)+0.5 )
-        ])
-        rot /= np.linalg.norm(rot)
+            rot = np.array([
+                1,
+                grid_pad * ( col - (self.grid_size/2)+0.5 ),
+                grid_pad * ( row - (self.grid_size/2)+0.5 )
+            ])
+            rot /= np.linalg.norm(rot)
 
-        # Scale distance
-        distance_scaled = distance / 1000
-        rot *= distance_scaled
-
-        if distance_scaled > self.MAX_DISTANCE_CM:
-            #return np.array([0, 0, 0])
-            pass
-            # TODO: THis
-
-        #coordinate = self._rpy_to_rot(np.array([0, 0, 0])) @ rot + self._cf_pos
-        #print(rot)
-        rot = ( self._rpy_to_rot(np.array([0, 0, 0])) @ rot) + self._cf_pos
-        rot = rot[0]
-        print(np.linalg.norm(rot))
+            distance_scaled = distance / 100
+            rot *= distance_scaled
+            rot = ( self._rpy_to_rot(np.array([0, 0, 0])) @ rot) + self._cf_pos
+            rot = rot[0]
 
         #  x: col - horizontal
         #  y: row - vertical

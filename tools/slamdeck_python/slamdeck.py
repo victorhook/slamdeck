@@ -14,6 +14,7 @@ from slamdeck_python.slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode,
                           VL53L5CX_TargetOrder, SlamdeckCommand,
                           SlamdeckResult, SlamdeckSensor)
 from slamdeck_python.utils import Observable, Subscriber
+from time import time
 
 logger = logging.getLogger()
 
@@ -60,7 +61,12 @@ class Slamdeck:
     def __init__(self, backend: Backend) -> None:
         self._backend = backend
         self._sensors = self._create_sensors()
+        
+        # Sampling
         self._is_sampling: bool = False
+        self._sampling_rate = 0
+        self._samples = 0
+        self._t0 = time()
 
     def get_initial_sensor_settings(self, sensor: SlamdeckSensor) -> Sensor:
         if not self.is_connected():
@@ -84,6 +90,9 @@ class Slamdeck:
             SlamdeckSensor.BACK:  Sensor(id=SlamdeckSensor.BACK, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
             SlamdeckSensor.LEFT:  Sensor(id=SlamdeckSensor.LEFT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8)
         }
+
+    def get_sampling_rate(self) -> int:
+        return self._sampling_rate
 
     def get_sensor_model(self, sensor: SlamdeckSensor) -> Sensor:
         return self._sensors.get(sensor, None)
@@ -298,6 +307,15 @@ class Slamdeck:
 
         # If we're continously sampling, we request new data immediately.
         if self._is_sampling:
+            # Update sampling rate
+            now = time()
+            if (now - self._t0) > 1:
+                self._sampling_rate = self._samples
+                self._samples = 0
+                self._t0 = now
+
+            self._samples += 1
+
             if command == SlamdeckCommand.GET_DATA:
                 self._cmd_execute(SlamdeckCommand.GET_DATA, sensor, attribute)
 

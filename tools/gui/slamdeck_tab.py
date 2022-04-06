@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 import logging
 from threading import Thread, Event, currentThread
+import typing as t
+from enum import IntEnum
+import time
 
 from PyQt5 import uic
-from PyQt5.QtCore import pyqtSignal, QPointF, QSizeF, QRectF, QObject
+from PyQt5.QtCore import pyqtSignal, QPointF, QSizeF, QRectF, QObject, QTimer, QThread
 from PyQt5.QtWidgets import (QMessageBox, QWidget, QGraphicsScene, QGraphicsView,
                             QGraphicsTextItem, QGraphicsRectItem, QComboBox,
                             QLabel, QLineEdit, QPushButton, QPlainTextEdit,
@@ -14,12 +17,12 @@ from pathlib import Path
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-
 import numpy as np
 from  matplotlib.colors import LinearSegmentedColormap, rgb2hex
 
 
 from tab import Tab
+from visualizer_3d import Visualizer3d
 from slamdeck_python.slamdeck import Slamdeck
 from slamdeck_python.backend_cpx import BackendCPX, BackendCPXProtocol
 from slamdeck_python.backend import BackendParams, Callback
@@ -34,9 +37,7 @@ logger = logging.getLogger(__name__)
 
 example_tab_class = uic.loadUiType(Path(__file__).parent.joinpath('ui/slamdeck_tab.ui'))[0]
 
-import typing as t
-from enum import IntEnum
-import time
+
 
 t0 = 0
 received = False
@@ -53,6 +54,7 @@ class SensorUi(QObject, Subscriber):
 
     _s_update_ui = pyqtSignal()
     _s_create_grids = pyqtSignal()
+    FPS = 30
 
     colors = [QBrush(QColor(rgb2hex(cmap(value)))) for value in range(N+1)]
 
@@ -68,16 +70,17 @@ class SensorUi(QObject, Subscriber):
         self.dimension = 4
         self._is_small = small
 
-        self._s_update_ui.connect(self._cb_update_ui)
         self._s_create_grids.connect(self._create_grids)
 
         # Add subscriptions
         self.set_sensor(sensor)
+        self._graph_timer = QTimer()
+        self._graph_timer.setInterval(int(1000 / self.FPS))
+        self._graph_timer.timeout.connect(self._update_graphics)
+        #self._graph_timer.start()
 
     def set_sensor(self, sensor: Sensor):
-        #self.sensor.unsubscribe(self)
         self.sensor = sensor
-        self.sensor.subscribe(self, 'data')
         self.set_dimension(self.sensor.resolution)
         self._s_create_grids.emit()
 
@@ -87,13 +90,7 @@ class SensorUi(QObject, Subscriber):
         else:
             self.dimension = 8
 
-    def on_change(self, value: np.ndarray) -> None:
-        self._s_update_ui.emit()
-
-    def _cb_update_ui(self) -> None:
-        #rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-        #PIL_image = Image.fromarray(rgb_image).convert('RGB')
-        #return QPixmap.fromImage(ImageQt(PIL_image))
+    def _update_graphics(self) -> None:
         g = 0
         distances = self.sensor.data
 
@@ -138,46 +135,6 @@ class SensorUi(QObject, Subscriber):
         text: QGraphicsTextItem
 
 
-class ContinousSamplingThread(Thread):
-
-    def __init__(self, slamdeck: Slamdeck, sensor: SlamdeckSensor):
-        super().__init__(daemon=True)
-        self._slamdeck = slamdeck
-        self._sensor = sensor
-        self._is_running = Event()
-        self._has_received_response = Event()
-
-    def received_response(self) -> None:
-        """ Should be called from different thread to indicate that we've received
-            a response from the last data request.
-        """
-        self._has_received_response.set()
-
-    def stop(self) -> None:
-        self._is_running.clear()
-        self.received_response()
-
-    def _received_response(self) -> bool:
-        return self._has_received_response.is_set()
-
-    def _clear_response(self) -> bool:
-        return self._has_received_response.clear()
-
-    def run(self) -> None:
-        self._is_running.set()
-        logger.debug(f'Sampling thread started: {currentThread().getName()}')
-
-        while self._is_running.is_set() and self._slamdeck.is_connected():
-            self._slamdeck.get_data_from_sensor(self._sensor)
-
-            while not self._received_response():
-                pass
-
-            self._clear_response()
-
-        logger.debug('Sampling thread ended.')
-
-
 class SlamdeckTab(Tab, example_tab_class):
 
     _s_connecting = pyqtSignal()
@@ -199,6 +156,10 @@ class SlamdeckTab(Tab, example_tab_class):
         self.btnDisconnect.clicked.connect(self._disconnect)
         self.btnTest.clicked.connect(self._test)
         self.btnStartSampling.clicked.connect(self._start_sampling)
+        self.btnStopSampling.clicked.connect(self._stop_sampling)
+
+        self.findChild(QPushButton, 'btnSetSensor').clicked.connect(self._set)
+        self.findChild(QPushButton, 'btnUpdateConfig').clicked.connect(self._get_sensor_config)
 
         # Attach PyQt signals to callback functions
         self._s_on_new_data.connect(self._cb_on_new_data)
@@ -208,9 +169,6 @@ class SlamdeckTab(Tab, example_tab_class):
         self._s_connection_error.connect(self._cb_connection_error)
 
         self._s_update_sensor_config_ui.connect(self._cb_update_sensor_config_ui)
-
-        self.findChild(QPushButton, 'btnSetSensor').clicked.connect(self._set)
-        self.findChild(QPushButton, 'btnUpdateConfig').clicked.connect(self._get_sensor_config)
 
         # Get references to children
         self.debugRaw = self.findChild(QPlainTextEdit, 'debugRaw')
@@ -226,13 +184,13 @@ class SlamdeckTab(Tab, example_tab_class):
         self.comboRangingMode: QComboBox = self.findChild(QComboBox, 'comboRangingMode')
 
         self.mainTabs: QTabWidget = self.findChild(QTabWidget, 'mainTabs')
-        self.tabSensorGraphics: QTabWidget = self.findChild(QTabWidget, 'tabSensorGraphics')
+        #self.mainTabs.addTab(self.visualizer_3d, 'Visualizer 3D')
+        #self.tabSensorGraphics: QTabWidget = self.findChild(QTabWidget, 'tabSensorGraphics')
         #self.graphics2dVisualizer: QGraphicsView = self.findChild(QGraphicsView, 'tabSensorGraphics')
-        #self.graphics3dVisualizer: QOpenGLWidget = self.findChild(QOpenGLWidget, 'graphics3dVisualizer')
         #self.v = VispyTest()
-        #self.graphics3dVisualizer: QFrame = self.findChild(QFrame, 'graphics3dVisualizer')
-        #lay = QVBoxLayout(self.graphics3dVisualizer)
-        #lay.addWidget(self.v.native)
+        self.graphics3dVisualizer: QFrame = self.findChild(QFrame, 'graphics3dVisualizer')
+
+
         #self.v.show()
 
         self.editIp = self.findChild(QLineEdit, 'editIp')
@@ -266,14 +224,19 @@ class SlamdeckTab(Tab, example_tab_class):
 
         self._update_button_states(connected=False)
 
-
         config_sensor = self._current_sensor()
         if config_sensor == SlamdeckSensor.ALL:
             config_sensor = self.slamdeck.SENORS[0]
         self._cb_update_sensor_config_ui(self.slamdeck.get_sensor_model(config_sensor))
 
+        # Create 3d visualizer, which must be done after slamdeck instantiation
+        self.visualizer_3d = Visualizer3d(self.slamdeck)
+        lay = QVBoxLayout(self.graphics3dVisualizer)
+        lay.addWidget(self.visualizer_3d.native)
+
         # Create sampling thread reference
-        self._sampling_thread: ContinousSamplingThread = None
+        self._t0 = time.time()
+        self._samples = 0
 
     def _current_sensor(self) -> SlamdeckSensor:
         try:
@@ -375,13 +338,10 @@ class SlamdeckTab(Tab, example_tab_class):
         return self.tabSensorGraphics.currentWidget().objectName()
 
     def _start_sampling(self) -> None:
-        if self._sampling_thread is not None:
-            logger.warning('Already running continous sampling')
-            return
+        self.slamdeck.start_sampling(SlamdeckSensor.BACK)
 
-        #self._update_sensor_plot()
-        self._sampling_thread = ContinousSamplingThread(self.slamdeck, self._current_sensor())
-        self._sampling_thread.start()
+    def _stop_sampling(self) -> None:
+        self.slamdeck.stop_sampling()
 
     def _update_sensor_plot(self) -> None:
         sensor = self._current_sensor()
@@ -389,7 +349,7 @@ class SlamdeckTab(Tab, example_tab_class):
         sensor_model.subscribe_to_all(self)
 
     def _test(self) -> None:
-        sensor = self._current_sensor()
+        sensor = self._current_sensor(self._current_sensor())
         self.slamdeck.get_data_from_sensor(sensor)
         #self.sensor_single.set_sensor(self.slamdeck.get_sensor_model(sensor))
         #self.slamdeck.get_data_from_sensor(sensor)
@@ -407,26 +367,13 @@ class SlamdeckTab(Tab, example_tab_class):
     def _disconnect(self) -> None:
         self.slamdeck.disconnect()
 
-        if self._sampling_thread is not None:
-            self._sampling_thread.stop()
-            self._sampling_thread = None
-
     # --- Callbacks -- #
     def _cb_on_new_data(self) -> None:
-        # Notify samping thread that we've received the response
-        if self._sampling_thread is not None:
-            self._sampling_thread.received_response()
-            now = time.time()
-            if self.t0 == 0:
-                self.t0 = now
-
-            self.i += 1
-            dt = now - self.t0
-            if dt > 1:
-                print(f'{self.i} Hz, {self.i*self.PACKET_SIZE} bytes')
-                self.i = 0
-                self.t0 = now
-
+        update_3d = (1 / self.visualizer_3d.FPS)
+        self._s_set_sampling_rate.emit(self.slamdeck.get_sampling_rate())
+    # TODO, update cylce instead?
+    def _set_sampling_rate(self, sampling_rate: int) -> None:
+        self.labelSampleRate.setText(str())
 
     def _cb_connecting(self) -> None:
         logger.debug('Connecting...')

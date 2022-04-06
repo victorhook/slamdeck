@@ -129,12 +129,26 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QLabel" name="label_14">
+         <property name="text">
+          <string>Sample rate:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelSampleRate">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
       <widget class="QTabWidget" name="mainTabs">
        <property name="currentIndex">
-        <number>3</number>
+        <number>0</number>
        </property>
        <widget class="QWidget" name="tabSensors">
         <attribute name="title">
@@ -397,7 +411,7 @@
          <item>
           <widget class="QTabWidget" name="tabSensorGraphics">
            <property name="currentIndex">
-            <number>1</number>
+            <number>0</number>
            </property>
            <widget class="QWidget" name="tabSingleSensor">
             <attribute name="title">
