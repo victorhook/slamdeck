@@ -34,6 +34,8 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 
+#include "slamdeck.h"
+
 #include "cpx.h"
 //#include "spi_transport.h"
 #include "uart_transport.h"
@@ -159,8 +161,8 @@ void router_init() {
 
   //xTaskCreate(router_from_gap8, "Router from GAP8", 5000, NULL, 1, NULL);
   //xTaskCreate(router_from_crazyflie, "Router from CF", 5000, NULL, 1, NULL);
-  xTaskCreate(router_from_esp32, "Router from ESP32", 5000, NULL, 1, NULL);
-  xTaskCreate(router_from_wifi, "Router from WIFI", 5000, NULL, 1, NULL);
+  xTaskCreatePinnedToCore(router_from_esp32, "Router from ESP32", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
+  xTaskCreatePinnedToCore(router_from_wifi, "Router from WIFI", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
 
   ESP_LOGI(TAG, "Waiting for tasks to start");
   xEventGroupWaitBits(startUpEventGroup,

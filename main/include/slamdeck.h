@@ -37,6 +37,9 @@
 
 #define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
 
+#define SLAMDECK_SENSOR_HANDLING_CORE 1
+#define SLAMDECK_NOT_SENSOR_HANDLING_CORE 0
+
 //#define DISABLED_WIFI_API
 
 /* --- Functions --- */

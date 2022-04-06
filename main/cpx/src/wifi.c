@@ -40,6 +40,8 @@
 
 #include "esp_task_wdt.h"
 
+#include "slamdeck.h"
+
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "lwip/sockets.h"
@@ -446,9 +448,9 @@ void wifi_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK | START_UP_CTRL_TASK);
-  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 3, NULL);
-  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 3, NULL);
-  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 3, NULL);
+  xTaskCreatePinnedToCore(wifi_task, "WiFi TASK", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
+  xTaskCreatePinnedToCore(wifi_sending_task, "WiFi TX", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
+  xTaskCreatePinnedToCore(wifi_receiving_task, "WiFi RX", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
   ESP_LOGI(TAG, "Waiting for main, RX and TX tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK,
@@ -456,7 +458,7 @@ void wifi_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 3, NULL);
+  xTaskCreatePinnedToCore(wifi_ctrl, "WiFi CTRL", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
   ESP_LOGI(TAG, "Waiting for CTRL task to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_CTRL_TASK,

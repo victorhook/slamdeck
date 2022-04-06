@@ -34,6 +34,8 @@
 #include "freertos/event_groups.h"
 #include "esp_log.h"
 
+#include "slamdeck.h"
+
 #include "router.h"
 #include "esp_transport.h"
 #include "slamdeck_api.h"
@@ -96,7 +98,7 @@ void com_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_RX_TASK);
-  xTaskCreate(com_rx, "COM RX", 5000, NULL, 1, NULL);
+  xTaskCreatePinnedToCore(com_rx, "COM RX", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_RX_TASK,
                       pdTRUE, // Clear bits before returning
