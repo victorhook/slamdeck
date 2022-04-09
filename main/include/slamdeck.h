@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal/gpio_types.h"
+#include "vl53l5cx.h"
 
 
 /* --- GPIO definitions --- */
@@ -20,6 +21,7 @@
 #define SLAMDECK_I2C_SCL            GPIO_NUM_12
 #define SLAMDECK_I2C_SDA            GPIO_NUM_13
 
+#define SLAMDECK_UART_CF            UART_NUM_1
 #define SLAMDECK_UART_TX1           GPIO_NUM_17
 #define SLAMDECK_UART_RX1           GPIO_NUM_18
 #define SLAMDECK_UART_TX0           GPIO_NUM_43
@@ -40,7 +42,54 @@
 #define SLAMDECK_SENSOR_HANDLING_CORE 1
 #define SLAMDECK_NOT_SENSOR_HANDLING_CORE 0
 
+#define SLAMDECK_NBR_OF_SENSORS 5
+
+typedef enum {
+    SLAMDECK_SENSOR_ID_MAIN    = 0,
+    SLAMDECK_SENSOR_ID_FRONT   = 1,
+    SLAMDECK_SENSOR_ID_RIGHT   = 2,
+    SLAMDECK_SENSOR_ID_BACK    = 3,
+    SLAMDECK_SENSOR_ID_LEFT    = 4,
+    SLAMDECK_SENSOR_ID_ALL     = 5,
+    SLAMDECK_SENSOR_ID_NOT_SET = 255,
+} slamdeck_sensor_id_e;
+
+typedef enum {
+    SLAMDECK_COMMAND_GET_DATA            = 0,
+    SLAMDECK_COMMAND_GET_SETTINGS        = 1,
+    SLAMDECK_COMMAND_SET_SETTINGS        = 2,
+    SLAMDECK_COMMAND_START_STREAMING     = 3,
+    SLAMDECK_COMMAND_STOP_STREAMING      = 4,
+} slamdeck_command_e;
+
+typedef enum {
+    SLAMDECK_RESULT_OK             = 0,
+    SLAMDECK_RESULT_ERROR          = 1,
+    SLAMDECK_RESULT_COMMAND_INVALD = 2
+} slamdeck_result_e;
+
+typedef enum {
+    SLAMDECK_STATE_IDLE      = 0,
+    SLAMDECK_STATE_STREAMING = 1,
+    SLAMDECK_STATE_SLEEP     = 2
+} slamdeck_state_e;
+
+typedef struct {
+    slamdeck_sensor_id_e sensor;
+    slamdeck_command_e   command;
+    uint8_t              data;
+} set_request_t;
+
 //#define DISABLED_WIFI_API
 
 /* --- Functions --- */
 void slamdeck_init();
+void slamdeck_set_sensor_settings(const VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS]);
+void slamdeck_get_sensor_settings(VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS]);
+
+/* Gets the data (in mm) from the sensors and puts them into buf.
+   The status of each sensor is stored in the status array.
+   Returns the size of all the data.
+*/
+uint16_t slamdeck_get_sensor_data(uint8_t* buf, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS]);
+

@@ -5,38 +5,29 @@
 
 
 #define VL53L5CX_RESULT_MAX_BUF_SIZE 128
+#define DATA_DISTANCE_MM_MAX_BUFFER_SIZE_U16 64
 
-typedef enum {
-    RESULT_OK,
-    RESULT_FAIL
-} VL53L5CX_result_e;
+#define VL53L5CX_STATUS_NOT_ENABLED 2
+#define VL53L5CX_STATUS_INIT_FAIL   3
 
-typedef enum {
-    SENSOR_STATUS_OK           = 0,
-    SENSOR_STATUS_INITIALIZING = 1,
-    SENSOR_STATUS_FAILED       = 2
-} VL53L5CX_status_e;
+typedef uint8_t  VL53L5CX_status_e;
+typedef uint32_t VL53L5CX_integration_time_ms_e;
+typedef uint8_t  VL53L5CX_sharpener_percent_e;
+typedef uint8_t  VL53L5CX_ranging_frequency_hz_e;
+typedef uint8_t  VL53L5CX_power_mode_e;
+typedef uint8_t  VL53L5CX_resolution_e;
+typedef uint8_t  VL53L5CX_target_order_e;
+typedef uint8_t  VL53L5CX_ranging_mode_e;
 
-typedef enum {
-    POWER_MODE_SLEEP  = 0,
-    POWER_MODE_WAKEUP = 1
-} VL53L5CX_power_mode_e;
-
-typedef enum {
-    RESOLUTION_4X4 = 16,
-    RESOLUTION_8X8 = 64
-} VL53L5CX_resolution_e;
-
-typedef enum {
-    TARGET_ORDER_CLOSEST   = 1,
-    TARGET_ORDER_STRONGEST = 2
-} VL53L5CX_target_order_e;
-
-typedef enum {
-    RANGING_MODE_CONTINUOUS = 1,
-    RANGING_MODE_AUTONOMOUS = 3
-} VL53L5CX_ranging_mode_e;
-
+typedef struct {
+    VL53L5CX_integration_time_ms_e   integration_time_ms;
+    VL53L5CX_sharpener_percent_e     sharpener_percent;
+    VL53L5CX_ranging_frequency_hz_e  ranging_frequency_hz;
+    VL53L5CX_resolution_e            resolution;
+    VL53L5CX_power_mode_e            power_mode;
+    VL53L5CX_target_order_e          target_order;
+    VL53L5CX_ranging_mode_e          ranging_mode;
+} __attribute__((packed)) VL53L5CX_settings_t;
 
 /*
 To have consistent data, the user needs to filter invalid target status. To give a confidence rating, a target with
@@ -59,7 +50,7 @@ typedef enum {
     TARGET_STATUS_TARGET_BLURRED                  = 12, // Target blurred by another one, due to sharpener
     TARGET_STATUS_TARGET_OK_BUT_INCONSISTENT_DATA = 13, // Target detected but inconsistent data. Frequently happens for secondary targets.
     TARGET_STATUS_TARGET_NOT_DETECTED             = 255 // No target detected (only if number of target detected is enabled)
-} VL53L5CX_target_status_e;
+} VL53L5CX_target_status_codes_e;
 
 
 typedef struct {
@@ -68,18 +59,12 @@ typedef struct {
     uint8_t                 data_ready;
     uint8_t                 id;
     uint8_t                 i2c_address;
-    uint8_t                 disabled;
     uint32_t                last_sample;
     uint64_t                samples;
     uint8_t                 is_ranging;
-    uint32_t                integration_time_ms;
-    uint8_t                 sharpener_percent;
-    uint8_t                 ranging_frequency_hz;
     VL53L5CX_status_e       status;
-    VL53L5CX_resolution_e   resolution;
-    VL53L5CX_power_mode_e   power_mode;
-    VL53L5CX_target_order_e target_order;
-    VL53L5CX_ranging_mode_e ranging_mode;
+    VL53L5CX_settings_t     settings;
+    uint16_t                data_distance_mm[DATA_DISTANCE_MM_MAX_BUFFER_SIZE_U16];
 
     // ST's driver types
     VL53L5CX_Configuration  config;

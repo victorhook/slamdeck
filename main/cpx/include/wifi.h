@@ -49,6 +49,17 @@ typedef struct {
 } __attribute__((packed)) WifiTransportPacket_t;
 
 
+typedef enum {
+  WIFI_CTRL_SET_SSID                = 0x10,
+  WIFI_CTRL_SET_KEY                 = 0x11,
+
+  WIFI_CTRL_WIFI_CONNECT            = 0x20,
+
+  WIFI_CTRL_STATUS_WIFI_CONNECTED   = 0x31,
+  WIFI_CTRL_STATUS_CLIENT_CONNECTED = 0x32,
+} wifi_ctrl_e;
+
+
 void wifi_init();
 
 // Interface used by the router

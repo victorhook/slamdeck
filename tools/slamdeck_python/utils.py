@@ -3,6 +3,21 @@ from dataclasses import dataclass
 import typing as t
 
 
+def time_function(func):
+    from time import time
+
+
+    def wrapper(*args, **kwargs):
+        t0 = time()
+        result = func(*args, **kwargs)
+        dt = time() - t0
+        print(f'{func.__name__} -> {round(dt*1000, 3)} ms')
+        print()
+        return result
+
+    return wrapper
+
+
 class Subscriber:
 
     def on_change(self, value: object) -> None:
@@ -80,3 +95,32 @@ class SimplePacket(BinaryPacket):
 
     def __len__(self) -> bytes:
         return len(self.data)
+
+
+
+
+class Callback:
+
+    def __init__(self, function: callable, args: tuple = tuple()) -> None:
+        self._function = function
+        self._args = args
+
+    def __call__(self, *args, **kwargs) -> None:
+        self._function(*args, *self._args, **kwargs)
+
+
+class CallbackHandler:
+
+    def __init__(self):
+        self._callbacks: t.List[Callback] = []
+
+    def add_callback(self, function: callable, args: tuple = tuple()) -> None:
+        if type(function) is not Callback:
+            cb = Callback(function, args)
+        else:
+            cb = function
+        self._callbacks.append(cb)
+
+    def call(self, *args, **kwargs) -> None:
+        for callback in self._callbacks:
+            callback(*args, **kwargs)

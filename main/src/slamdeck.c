@@ -16,71 +16,46 @@
 
 
 static VL53L5CX_t sensors[] = {
-    {.id=SLAMDECK_SENSOR_ID_MAIN,  .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
-    {.id=SLAMDECK_SENSOR_ID_FRONT, .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
-    {.id=SLAMDECK_SENSOR_ID_RIGHT, .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
-    {.id=SLAMDECK_SENSOR_ID_BACK,  .disabled=0, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
-    {.id=SLAMDECK_SENSOR_ID_LEFT,  .disabled=1, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
+    {.id=SLAMDECK_SENSOR_ID_MAIN,  .status=VL53L5CX_STATUS_OK,          .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
+    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
+    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
+    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
+    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
 };
 
+static const VL53L5CX_settings_t sensor_settings_default = {
+    .integration_time_ms = 5,
+    .sharpener_percent = 5,
+    .ranging_frequency_hz = 15,
+    .resolution = VL53L5CX_RESOLUTION_8X8,
+    .power_mode = VL53L5CX_POWER_MODE_WAKEUP,
+    .target_order = VL53L5CX_TARGET_ORDER_STRONGEST,
+    .ranging_mode = VL53L5CX_RANGING_MODE_AUTONOMOUS
+};
 
-#define NBR_OF_SENSORS sizeof(sensors) / sizeof(VL53L5CX_t)
-
-static VL53L5CX_t* enabled_sensors[NBR_OF_SENSORS];
-static uint8_t nbr_of_enabled_sensors = 0;
+static VL53L5CX_settings_t sensor_settings;
 
 static EventGroupHandle_t startUpEventGroup;
-static const int START_UP_SLAMDECK = BIT0;
-static const int START_UP_SLAMDECK_API = START_UP_SLAMDECK_API_BIT;
-static const int START_UP_CHECK_DATA_READY = BIT2;
+static const int START_UP_SLAMDECK         = BIT0;
+static const int START_UP_CHECK_DATA_READY = BIT1;
 
 static xQueueHandle queueDataReady;
 
 static const char* TAG = "SLAMDECK";
 
-uint8_t slamdeck_sensor_enabled(const slamdeck_sensor_id_e sensor)
+
+/* --- Private --- */
+static void print_sensor_settings(const VL53L5CX_settings_t* settings)
 {
-    return !slamdeck_get_sensor(sensor)->disabled;
-}
-
-VL53L5CX_t* slamdeck_get_sensor(const slamdeck_sensor_id_e sensor)
-{
-    if ((sensor < 0) || (sensor >= NBR_OF_SENSORS)) {
-        ESP_LOGE(TAG, "Sensor id %d out of bounds!", sensor);
-        return 0;
-    }
-    return &sensors[sensor];
-}
-
-static void slamdeck_task_check_data_ready()
-{
-    xEventGroupSetBits(startUpEventGroup, START_UP_CHECK_DATA_READY);
-
-    while (1) {
-
-        for (uint8_t i = 0; i < nbr_of_enabled_sensors; i++) {
-            VL53L5CX_t* sensor = enabled_sensors[i];
-
-            if (VL53L5CX_data_ready(sensor))
-                xQueueSend(queueDataReady, &sensor, portMAX_DELAY);
-
-        }
-
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
-}
-
-static void inline print_sensor(const VL53L5CX_t* sensor)
-{
-    printf("-------------- Sensor %d -----------------\n", (uint8_t) sensor->id);
-    printf("power_mode: %d\n", sensor->power_mode);
-    printf("resolution: %d\n", sensor->resolution);
-    printf("ranging_frequency_hz: %d\n", sensor->ranging_frequency_hz);
-    printf("integration_time_ms: %d\n", sensor->integration_time_ms);
-    printf("sharpener_percent: %d\n", sensor->sharpener_percent);
-    printf("target_order: %d\n", sensor->target_order);
-    printf("ranging_mode: %d\n", sensor->ranging_mode);
-    printf("temperature: %d\n", sensor->result.silicon_temp_degc);
+    printf("-------------- Settings -----------------\n");
+    printf("power_mode: %d\n", settings->power_mode);
+    printf("resolution: %d\n", settings->resolution);
+    printf("ranging_frequency_hz: %d\n", settings->ranging_frequency_hz);
+    printf("integration_time_ms: %d\n", settings->integration_time_ms);
+    printf("sharpener_percent: %d\n", settings->sharpener_percent);
+    printf("target_order: %d\n", settings->target_order);
+    printf("ranging_mode: %d\n", settings->ranging_mode);
+    //printf("temperature: %d\n", result->silicon_temp_degc);
     printf("-------------------------------------------\n");
     fflush(stdout);
 }
@@ -88,7 +63,7 @@ static void inline print_sensor(const VL53L5CX_t* sensor)
 static void print_sensor_data(const VL53L5CX_t* sensor)
 {
     int grid = 0;
-    int row_size = sensor->resolution == VL53L5CX_RESOLUTION_4X4 ? 4 : 8;
+    int row_size = sensor->settings.resolution == VL53L5CX_RESOLUTION_4X4 ? 4 : 8;
     for (int row = row_size-1; row >= 0; row--) {
         for (int col = 0; col < row_size; col++) {
             printf("| %3u  %4d ", sensor->result.target_status[grid], sensor->data_distance_mm[grid]);
@@ -99,83 +74,185 @@ static void print_sensor_data(const VL53L5CX_t* sensor)
     printf("\n");
 }
 
-static uint8_t set_sensor_default_values(VL53L5CX_t* sensor)
+static uint16_t get_data_size(const VL53L5CX_settings_t* settings)
 {
-    uint8_t result = VL53L5CX_STATUS_OK;
-    result |= VL53L5CX_set_power_mode(sensor, VL53L5CX_POWER_MODE_WAKEUP);
-    result |= VL53L5CX_set_resolution(sensor, VL53L5CX_RESOLUTION_8X8);
-    result |= VL53L5CX_set_ranging_frequency_hz(sensor, 15); // 60 max for 4x4
-    result |= VL53L5CX_set_ranging_mode(sensor, VL53L5CX_RANGING_MODE_AUTONOMOUS);
-    result |= VL53L5CX_set_sharpener_percent(sensor, 5);
-    result |= VL53L5CX_set_target_order(sensor, VL53L5CX_TARGET_ORDER_STRONGEST);
-    result |= VL53L5CX_set_integration_time_ms(sensor, 5);
-    print_sensor(sensor);
-    return result;
+    return settings->resolution * 2;
+}
+
+static VL53L5CX_status_e set_single_sensor_settings(VL53L5CX_t* sensor, const VL53L5CX_settings_t* settings)
+{
+    if (sensor->status == VL53L5CX_STATUS_NOT_ENABLED)
+        return sensor->status;
+
+    uint8_t require_restart = sensor->is_ranging;
+
+    if (require_restart) {
+        VL53L5CX_stop(sensor);
+        if (sensor->status != VL53L5CX_STATUS_OK)
+            return sensor->status;
+    }
+
+    VL53L5CX_set_power_mode(sensor, settings->power_mode);
+    VL53L5CX_set_resolution(sensor, settings->resolution);
+    VL53L5CX_set_ranging_frequency_hz(sensor, settings->ranging_frequency_hz);
+    VL53L5CX_set_ranging_mode(sensor, settings->ranging_mode);
+    VL53L5CX_set_sharpener_percent(sensor, settings->sharpener_percent);
+    VL53L5CX_set_target_order(sensor, settings->target_order);
+    VL53L5CX_set_integration_time_ms(sensor, settings->integration_time_ms);
+
+    if (sensor->status != VL53L5CX_STATUS_OK) {
+        ESP_LOGW(TAG, "Failed to set config, error: %d", sensor->status);
+        return sensor->status;
+    }
+
+    if (require_restart) {
+        VL53L5CX_start(sensor);
+        if (sensor->status != VL53L5CX_STATUS_OK) {
+            return sensor->status;
+        }
+    }
+
+    memcpy(&sensor->settings, settings, sizeof(VL53L5CX_settings_t));
+
+    return sensor->status;
+}
+
+static VL53L5CX_status_e get_single_sensor_data(VL53L5CX_t* sensor, uint8_t* buf, const uint16_t data_size)
+{
+    if (sensor->status == VL53L5CX_STATUS_NOT_ENABLED)
+        return sensor->status;
+    memcpy(buf, sensor->data_distance_mm, data_size);
+    ((uint16_t*) buf)[0] = 11;
+    return sensor->status;
+}
+
+static void copy_settings(VL53L5CX_settings_t* dst, const VL53L5CX_settings_t* src)
+{
+    dst->integration_time_ms = src->integration_time_ms;
+    dst->sharpener_percent = src->sharpener_percent;
+    dst->ranging_frequency_hz = src->ranging_frequency_hz;
+    dst->resolution = src->resolution;
+    dst->power_mode = src->power_mode;
+    dst->target_order = src->target_order;
+    dst->ranging_mode = src->ranging_mode;
+}
+
+/* --- Public --- */
+void slamdeck_set_sensor_settings(const VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
+{
+    copy_settings(&sensor_settings, settings);
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+        status[sensor_id] = set_single_sensor_settings(&sensors[sensor_id], &sensor_settings);
+    }
+}
+
+void slamdeck_get_sensor_settings(VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
+{
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+        status[sensor_id] = sensors[sensor_id].status;
+    }
+    memcpy(settings, &sensor_settings, sizeof(VL53L5CX_settings_t));
+}
+
+uint16_t slamdeck_get_sensor_data(uint8_t* buf, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
+{
+    uint16_t data_size = get_data_size(&sensor_settings);
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+        status[sensor_id] = get_single_sensor_data(&sensors[sensor_id], buf, data_size);
+    }
+
+    return data_size * SLAMDECK_NBR_OF_SENSORS;
+}
+
+/* --- FreeRTOS Threads --- */
+static void slamdeck_task_check_data_ready()
+{
+    xEventGroupSetBits(startUpEventGroup, START_UP_CHECK_DATA_READY);
+
+    while (1) {
+
+        for (uint8_t i = 0; i < SLAMDECK_NBR_OF_SENSORS; i++) {
+            VL53L5CX_t* sensor = &sensors[i];
+            if ((sensor->status == VL53L5CX_STATUS_OK) && VL53L5CX_data_ready(sensor))
+                xQueueSend(queueDataReady, &sensor, portMAX_DELAY);
+        }
+
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
 }
 
 static void slamdeck_task()
 {
+    // Set default sensor settings
+    memcpy(&sensor_settings, &sensor_settings_default, sizeof(VL53L5CX_settings_t));
+
     // Ensure i2c is initialized before starting
     while (!i2c_is_initialized()) {
         vTaskDelay(50/portTICK_PERIOD_MS);
     }
 
-    ESP_LOGI(TAG, "Initializing %d sensors.", NBR_OF_SENSORS);
+
+    ESP_LOGI(TAG, "Initializing %d sensors.", SLAMDECK_NBR_OF_SENSORS);
     VL53L5CX_t* sensor;
-    VL53L5CX_status_e result;
 
     vTaskDelay(10/portTICK_PERIOD_MS);
 
     // Initialize gpio and disable all sensors
-    for (uint8_t i = 0; i < NBR_OF_SENSORS; i++) {
+    for (uint8_t i = 0; i < SLAMDECK_NBR_OF_SENSORS; i++) {
         sensor = &sensors[i];
         VL53L5CX_init_gpio(sensor);
         VL53L5CX_disable(sensor);
     }
 
     // Initialize all (enabled) sensors
-    for (uint8_t i = 0; i < NBR_OF_SENSORS; i++) {
+    int initialized_sensors = 0;
+    for (uint8_t i = 0; i < SLAMDECK_NBR_OF_SENSORS; i++) {
         sensor = &sensors[i];
-        if (sensor->disabled)
+        if (sensor->status == VL53L5CX_STATUS_NOT_ENABLED)
             continue;
 
         // Initialize sensor. This include writing ~80kB firmware to it.
         ESP_LOGI(TAG, "Initializing sensor %d", i);
-        result = VL53L5CX_init(sensor);
+        sensor->status = VL53L5CX_init(sensor);
 
-        if (result == VL53L5CX_STATUS_OK) {
-            enabled_sensors[nbr_of_enabled_sensors] = sensor;
-            nbr_of_enabled_sensors++;
+        if (sensor->status == VL53L5CX_STATUS_OK) {
+            initialized_sensors++;
             ESP_LOGI(TAG, "Sensor %d initialized", i);
         } else {
-            ESP_LOGI(TAG, "Sensor %d fail to initialize, error: %d", i, result);
+            ESP_LOGI(TAG, "Sensor %d fail to initialize, error: %d", i, sensor->status);
         }
     }
+    ESP_LOGD(TAG, "%d Sensors initialized", initialized_sensors);
 
 
     // Start all initialized sensors
-    ESP_LOGI(TAG, "Starting sensors...");
-    for (uint8_t i = 0; i < nbr_of_enabled_sensors; i++) {
+    int started_sensors = 0;
+    for (uint8_t i = 0; i < SLAMDECK_NBR_OF_SENSORS; i++) {
+        sensor = &sensors[i];
+        if (sensor->status != VL53L5CX_STATUS_OK)
+            continue;
+
         ESP_LOGI(TAG, "Starting sensor %d", i);
-        sensor = enabled_sensors[i];
-        result = VL53L5CX_start(sensor);
-        if (result == VL53L5CX_STATUS_OK) {
-            result = set_sensor_default_values(sensor);
-            if (result != VL53L5CX_STATUS_OK) {
+
+        sensor->status = VL53L5CX_start(sensor);
+        if (sensor->status == VL53L5CX_STATUS_OK) {
+            //status = set_sensor_default_values(sensor);
+            started_sensors++;
+            if (sensor->status != VL53L5CX_STATUS_OK) {
                 ESP_LOGW(TAG, "Failed to set default values to sensor %d", sensor->id);
             }
         }
     }
+    ESP_LOGD(TAG, "%d Sensors started", started_sensors);
 
-    queueDataReady = xQueueCreate(nbr_of_enabled_sensors, sizeof(VL53L5CX_t*));
+
+    queueDataReady = xQueueCreate(SLAMDECK_NBR_OF_SENSORS, sizeof(VL53L5CX_t*));
     xEventGroupSetBits(startUpEventGroup, START_UP_SLAMDECK);
 
-    ESP_LOGD(TAG, "%d Sensors started", nbr_of_enabled_sensors);
     VL53L5CX_t* sensor_ready;
 
     uint64_t t0 = esp_timer_get_time();
-    uint32_t samples[NBR_OF_SENSORS];
-    char buf[200];
+    uint32_t samples[SLAMDECK_NBR_OF_SENSORS];
 
     while (1) {
         xQueueReceive(queueDataReady, &sensor_ready, portMAX_DELAY);
@@ -188,39 +265,30 @@ static void slamdeck_task()
 
         if (dt > 1000*seconds) {
             t0 = now;
-            for (int i = 0; i < nbr_of_enabled_sensors; i++) {
-                sensor = enabled_sensors[i];
+            for (int i = 0; i < SLAMDECK_NBR_OF_SENSORS; i++) {
+                sensor = &sensors[i];
+
+                if (sensor->status != VL53L5CX_STATUS_OK)
+                    continue;
+
                 printf("%lld: %dC | ", sensor->samples / seconds, sensor->result.silicon_temp_degc);
                 //print_sensor(sensor);
                 //print_sensor_data(sensor);
-                /*
-                for (int j = 0; j < 16; j+=2) {
-                    printf("%d ", (uint16_t) enabled_sensors[i]->result.distance_mm[j]);
-                }
-                printf("\n");
-                */
-                enabled_sensors[i]->samples = 0;
+                sensor->samples = 0;
             }
             printf("\n");
-            //vTaskGetRunTimeStats(buf);
-            //printf(buf);
         }
 
-        // Check if there's api requests do be done.
-        #ifndef DISABLED_WIFI_API
-            if (available_api_request()) {
-                execute_api_request();
-            }
-        #endif
     }
-
 }
+
 
 void slamdeck_init()
 {
     startUpEventGroup = xEventGroupCreate();
-    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_SLAMDECK_API | START_UP_CHECK_DATA_READY);
-    xTaskCreatePinnedToCore(slamdeck_task, "Slamdeck", 8000, NULL, 5, NULL, SLAMDECK_SENSOR_HANDLING_CORE);
+
+    xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_CHECK_DATA_READY);
+    xTaskCreate(slamdeck_task, "Slamdeck", 8000, NULL, 5, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_SLAMDECK,
@@ -228,23 +296,15 @@ void slamdeck_init()
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    xTaskCreatePinnedToCore(slamdeck_task_check_data_ready, "Slamdeck data ready", 5000, NULL, 4, NULL, SLAMDECK_SENSOR_HANDLING_CORE);
-
-    #ifndef DISABLED_WIFI_API
-    xTaskCreatePinnedToCore(slamdeck_api_task, "Slamdeck API", 6000, NULL, 4, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
-    #endif
+    xTaskCreate(slamdeck_task_check_data_ready, "Slamdeck DR", 5000, NULL, 4, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
-                        START_UP_CHECK_DATA_READY
-                        #ifndef DISABLED_WIFI_API
-                        | START_UP_SLAMDECK_API
-                        #endif
-                        ,
+                        START_UP_CHECK_DATA_READY,
                         pdTRUE, // Clear bits before returning
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    ESP_LOGI(TAG, "%d sensors initialized", nbr_of_enabled_sensors);
+    ESP_LOGI(TAG, "initialized");
 }
 
 

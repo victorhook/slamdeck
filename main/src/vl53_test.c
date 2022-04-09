@@ -11,7 +11,6 @@
 
 static VL53L5CX_t sensor = {
     .id=SLAMDECK_SENSOR_ID_BACK,
-	.disabled=0,
 	.enable_pin=SLAMDECK_GPIO_SENSOR_BACK,
 	.i2c_address=0x29
 };

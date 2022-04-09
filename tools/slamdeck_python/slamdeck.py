@@ -1,4 +1,7 @@
 from dataclasses import dataclass, fields
+from gzip import READ
+from multiprocessing import Event
+from pkgutil import get_data
 from numpy import dtype, ndarray, uint16, uint32, uint8
 from enum import IntEnum
 import numpy as np
@@ -7,38 +10,109 @@ import typing as t
 from threading import Thread
 import logging
 
-from slamdeck_python.backend import Backend, BackendParams, BackendFactory, Callback
-from slamdeck_python.cpx import CPX_Packet
-from slamdeck_python.slamdeck_api import (SlamdeckApiPacket, VL53L5CX_PowerMode, VL53L5CX_Resolution,
+from queue import Queue
+from slamdeck_python.cpx import BackendCPX
+from slamdeck_python.vl53l5cx import (VL53L5CX_PowerMode, VL53L5CX_Resolution,
                           VL53L5CX_RangingMode, VL53L5CX_Status,
-                          VL53L5CX_TargetOrder, SlamdeckCommand,
-                          SlamdeckResult, SlamdeckSensor)
-from slamdeck_python.utils import Observable, Subscriber
+                          VL53L5CX_TargetOrder, VL53L5CX)
+from slamdeck_python.utils import Observable, Subscriber, CallbackHandler, Callback
 from time import time
 
 logger = logging.getLogger()
 
 
-@dataclass
-class Sensor(Observable):
-    """
-        This class represents a single VL53L5CX sensor.
-        It implements the observable pattern, which allows subscribers
-        to subscribe to any change that happens to the sensor state.
-    """
-    id:                   SlamdeckSensor
-    data:                 np.ndarray           = np.ones(128, dtype=np.uint16)
-    i2c_address:          uint8                = 0x00
-    integration_time_ms:  uint32               = 0
-    sharpener_percent:    uint8                = 0
-    ranging_frequency_hz: uint8                = 0
-    resolution:           VL53L5CX_Resolution  = VL53L5CX_Resolution.RESOLUTION_4X4
-    power_mode:           VL53L5CX_PowerMode   = VL53L5CX_PowerMode.POWER_MODE_WAKEUP
-    target_order:         VL53L5CX_TargetOrder = VL53L5CX_TargetOrder.TARGET_ORDER_CLOSEST
-    ranging_mode:         VL53L5CX_RangingMode = VL53L5CX_RangingMode.RANGING_MODE_AUTONOMOUS
+""" Slamdeck API commands """
 
-    def __post_init__(self) -> None:
-        super().__init__()
+class SlamdeckCommand(IntEnum):
+    GET_DATA            = 0
+    GET_SETTINGS        = 1
+    SET_SETTINGS        = 2
+    START_STREAMING     = 3
+    START_STREAMING_ACK = 4
+    STOP_STREAMING      = 5
+    STOP_STREAMING_ACK  = 6
+
+class SlamdeckResult(IntEnum):
+    OK             = 0
+    ERROR          = 1
+    COMMAND_INVALD = 2
+
+class SlamdeckSensorId(IntEnum):
+    MAIN    = 0
+    FRONT   = 1
+    RIGHT   = 2
+    BACK    = 3
+    LEFT    = 4
+    ALL     = 5
+    NOT_SET = 255
+
+
+@dataclass
+class SlamdeckSettings:
+    integration_time_ms:  uint32
+    sharpener_percent:    uint8
+    ranging_frequency_hz: uint8
+    resolution:           VL53L5CX_Resolution
+    power_mode:           VL53L5CX_PowerMode
+    target_order:         VL53L5CX_TargetOrder
+    ranging_mode:         VL53L5CX_RangingMode
+
+    _struct_format = 'IBBBBBB'
+
+    def to_bytes(self) -> bytes:
+        return struct.pack(
+            self._struct_format,
+            self.integration_time_ms,
+            self.sharpener_percent,
+            self.ranging_frequency_hz,
+            self.resolution,
+            self.power_mode,
+            self.target_order,
+            self.ranging_mode
+        )
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> 'SlamdeckSettings':
+        params = struct.unpack(cls._struct_format, data)
+        return SlamdeckSettings(
+            params[0], params[1], params[2],
+            VL53L5CX_Resolution(params[3]),
+            VL53L5CX_PowerMode(params[4]),
+            VL53L5CX_TargetOrder(params[5]),
+            VL53L5CX_RangingMode(params[6]),
+        )
+
+class ActionType(IntEnum):
+    READ_DATA       = 0
+    WRITE      = 1
+    DISCONNECT = 3
+
+class Action:
+
+    def __init__(self, type: ActionType):
+        self.type = type
+
+    def __repr__(self) -> str:
+        return self.type.name
+
+class ActionWrite(Action):
+
+    def __init__(self, command: SlamdeckCommand, data: bytes = None):
+        super().__init__(type=ActionType.WRITE)
+        self.command = command
+        self.data = data
+
+    def __repr__(self) -> str:
+        return super().__repr__() + str(self.command)
+
+class ActionRead(Action):
+
+    def __init__(self, command: SlamdeckCommand):
+        super().__init__(type=ActionType.READ_DATA)
+        self.command = command
+
+    def __repr__(self) -> str:
+        return super().__repr__() + str(self.command)
 
 
 
@@ -50,291 +124,184 @@ class Slamdeck:
         to handle the communication with the actual slamdeck.
     """
 
-    SENORS = [
-        SlamdeckSensor.MAIN,
-        SlamdeckSensor.FRONT,
-        SlamdeckSensor.RIGHT,
-        SlamdeckSensor.BACK,
-        SlamdeckSensor.LEFT,
+    SENSOR_IDS = [
+        SlamdeckSensorId.MAIN,
+        SlamdeckSensorId.FRONT,
+        SlamdeckSensorId.RIGHT,
+        SlamdeckSensorId.BACK,
+        SlamdeckSensorId.LEFT,
     ]
 
-    def __init__(self, backend: Backend) -> None:
+    def __init__(self, backend: BackendCPX) -> None:
         self._backend = backend
         self._sensors = self._create_sensors()
-        
-        # Sampling
-        self._is_sampling: bool = False
-        self._sampling_rate = 0
+
+        self.connecting_handler = CallbackHandler()
+        self.connected_handler = CallbackHandler()
+        self.disconnected_handler = CallbackHandler()
+        self.connection_error_handler = CallbackHandler()
+        self.on_new_data_handler = CallbackHandler()
+
+        self._action_queue = Queue() # Actions
+
+        self._settings: SlamdeckSettings = None
+        self._is_running = Event()
+
+        self._data_size = 128
+
+        # streaming
+        self._is_streaming: bool = False
+        self._streaming_rate = 0
         self._samples = 0
         self._t0 = time()
 
-    def get_initial_sensor_settings(self, sensor: SlamdeckSensor) -> Sensor:
-        if not self.is_connected():
-            logging.error('Not connected yet')
-            return None
-        self.get_i2c_address(sensor)
-        self.get_integration_time_ms(sensor)
-        self.get_power_mode(sensor)
-        self.get_ranging_frequency_hz(sensor)
-        self.get_ranging_mode(sensor)
-        self.get_resolution(sensor)
-        self.get_sharpener_percent(sensor)
-        self.get_target_order(sensor)
-        return self.get_sensor_model(sensor)
+    def get_streaming_rate(self) -> int:
+        return self._streaming_rate
 
-    def _create_sensors(self) -> t.Dict[str, Sensor]:
-        return {
-            SlamdeckSensor.MAIN:  Sensor(id=SlamdeckSensor.MAIN, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
-            SlamdeckSensor.FRONT: Sensor(id=SlamdeckSensor.FRONT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
-            SlamdeckSensor.RIGHT: Sensor(id=SlamdeckSensor.RIGHT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
-            SlamdeckSensor.BACK:  Sensor(id=SlamdeckSensor.BACK, resolution=VL53L5CX_Resolution.RESOLUTION_8X8),
-            SlamdeckSensor.LEFT:  Sensor(id=SlamdeckSensor.LEFT, resolution=VL53L5CX_Resolution.RESOLUTION_8X8)
-        }
-
-    def get_sampling_rate(self) -> int:
-        return self._sampling_rate
-
-    def get_sensor_model(self, sensor: SlamdeckSensor) -> Sensor:
+    def get_sensor(self, sensor: SlamdeckSensorId) -> VL53L5CX:
         return self._sensors.get(sensor, None)
 
-    # --- Commands --- #
+    def is_connected(self) -> bool:
+        return self._is_running.is_set()
 
-    # -- I2C address -- #
-    def get_i2c_address(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_I2C_ADDRESS, sensor, 'i2c_address')
-
-    def set_i2c_address(self, sensor: SlamdeckSensor, i2c_address: uint8) -> None:
-        if i2c_address > 127:
-            logging.error(f'Can\t set i2c address of {i2c_address}. It must be less than 127.')
+    def start_streaming(self) -> None:
+        if self._is_streaming:
+            logger.error('Already streaming')
             return
-        self._cmd_execute(SlamdeckCommand.SET_I2C_ADDRESS, sensor, 'i2c_address', i2c_address)
 
-    # -- Power mode -- #
-    def get_power_mode(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_POWER_MODE, sensor, 'power_mode')
+        self._is_streaming = True
+        self._action_queue.put(ActionWrite(SlamdeckCommand.START_STREAMING))
 
-    def set_power_mode(self, sensor: SlamdeckSensor, power_mode: VL53L5CX_PowerMode) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_POWER_MODE, sensor, 'power_mode', power_mode)
-
-    # -- Resolution -- #
-    def get_resolution(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_RESOLUTION, sensor, 'resolution')
-
-    def set_resolution(self, sensor: SlamdeckSensor, resolution: VL53L5CX_Resolution) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_RESOLUTION, sensor, 'resolution', resolution)
-
-    # -- Ranging -- #
-    def get_ranging_frequency_hz(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_RANGING_FREQUENCY_HZ, sensor, 'ranging_frequency_hz')
-
-    def set_ranging_frequency_hz(self, sensor: SlamdeckSensor, ranging_frequency_hz: uint8) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_RANGING_FREQUENCY_HZ, sensor, 'ranging_frequency_hz', ranging_frequency_hz)
-
-    # -- Integration time -- #
-    def get_integration_time_ms(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_INTEGRATION_TIME_MS, sensor, 'integration_time_ms')
-
-    def set_integration_time_ms(self, sensor: SlamdeckSensor, integration_time_ms: uint32) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_INTEGRATION_TIME_MS, sensor, 'integration_time_ms', integration_time_ms)
-
-    # -- Sharpener precent -- #
-    def get_sharpener_percent(self, sensor: SlamdeckSensor) -> None:
-        print('get!')
-        self._cmd_execute(SlamdeckCommand.GET_SHARPENER_PERCENT, sensor, 'sharpener_percent')
-
-    def set_sharpener_percent(self, sensor: SlamdeckSensor, sharpener_percent: uint8) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_SHARPENER_PERCENT, sensor, 'sharpener_percent', sharpener_percent)
-
-    # -- Target order -- #
-    def get_target_order(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_TARGET_ORDER, sensor, 'target_order')
-
-    def set_target_order(self, sensor: SlamdeckSensor, target_order: uint8) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_TARGET_ORDER, sensor, 'target_order', target_order)
-
-    # -- Ranging mode -- #
-    def get_ranging_mode(self, sensor: SlamdeckSensor) -> None:
-        self._cmd_execute(SlamdeckCommand.GET_RANGING_MODE, sensor, 'ranging_mode')
-
-    def set_ranging_mode(self, sensor: SlamdeckSensor, ranging_mode: VL53L5CX_RangingMode) -> None:
-        self._cmd_execute(SlamdeckCommand.SET_RANGING_MODE, sensor, 'ranging_mode', ranging_mode)
-
-    def get_data_from_sensor(self, sensor: SlamdeckSensor) -> None:
-        # Resolution is in bytes, but data as uint16, so multiply by 2.
-        #bytes_to_read = (sensor.resolution * 2) + SlamdeckApiPacket.HEADER_SIZE
-        self._cmd_execute(SlamdeckCommand.GET_DATA, sensor, 'data')
-
-    # -- Other functions -- #
-    def start_sampling(self, sensor: SlamdeckSensor) -> None:
-        self._is_sampling = True
-        self.get_data_from_sensor(sensor)
-
-    def stop_sampling(self) -> None:
-        self._is_sampling = False
-
-    def connect(self) -> Thread:
-        return self._backend.start()
+    def stop_streaming(self) -> None:
+        self._is_streaming = False
+        self._action_queue.put(ActionWrite(SlamdeckCommand.STOP_STREAMING))
 
     def disconnect(self) -> None:
-        self._backend.stop()
-        self._is_sampling = False
+        self._action_queue.put(Action(type=ActionType.DISCONNECT))
 
-    def is_connected(self) -> bool:
-        return self._backend.is_connected()
-
-    """ --- Callbacks --- """
-    def add_cb_connecting(self, callback: Callback) -> None:
-        self._backend.cb_connecting.add_callback(callback)
-
-    def add_cb_connected(self, callback: Callback) -> None:
-        self._backend.cb_connected.add_callback(callback)
-
-    def add_cb_disconnected(self, callback: Callback) -> None:
-        self._backend.cb_disconnected.add_callback(callback)
-
-    def add_cb_connection_error(self, callback: Callback) -> None:
-        self._backend.cb_connection_error.add_callback(callback)
-
-    def add_cb_on_new_data(self, callback: Callback) -> None:
-        self._backend.cb_on_new_data.add_callback(callback)
-
-    def _is_getter(self, command: SlamdeckCommand) -> None:
-        return command in [
-            SlamdeckCommand.GET_SENSOR_STATUS,
-            SlamdeckCommand.GET_DATA,
-            SlamdeckCommand.GET_I2C_ADDRESS,
-            SlamdeckCommand.GET_POWER_MODE,
-            SlamdeckCommand.GET_RESOLUTION,
-            SlamdeckCommand.GET_RANGING_FREQUENCY_HZ,
-            SlamdeckCommand.GET_INTEGRATION_TIME_MS,
-            SlamdeckCommand.GET_SHARPENER_PERCENT,
-            SlamdeckCommand.GET_TARGET_ORDER,
-            SlamdeckCommand.GET_RANGING_MODE,
-        ]
-
-    def get_data_size(self, sensor: Sensor) -> int:
-        return sensor.resolution * 2
-
-    def _update_sensor_model(self,
-                             command: SlamdeckCommand,
-                             sensor: Sensor,
-                             attribute: str,
-                             result: bytes,
-                             data_sent: bytes = None
-            ) -> int:
-        """
-            Returns how many bytes of the result that is used.
-        """
-        result_size = 1
-
-        # Check for getters
-        if command == SlamdeckCommand.GET_SENSOR_STATUS:
-            pass
-        elif command == SlamdeckCommand.GET_DATA:
-            value = np.frombuffer(result, dtype=np.uint16)
-        elif command == SlamdeckCommand.GET_I2C_ADDRESS:
-            value = ord(result)
-        elif command == SlamdeckCommand.GET_POWER_MODE:
-            value = VL53L5CX_PowerMode(ord(result))
-        elif command == SlamdeckCommand.GET_RESOLUTION:
-            value = VL53L5CX_Resolution(ord(result))
-        elif command == SlamdeckCommand.GET_RANGING_FREQUENCY_HZ:
-            value = ord(result)
-        elif command == SlamdeckCommand.GET_INTEGRATION_TIME_MS:
-            value = struct.unpack('I', result)[0]
-            result_size = 4
-        elif command == SlamdeckCommand.GET_SHARPENER_PERCENT:
-            value = ord(result)
-        elif command == SlamdeckCommand.GET_TARGET_ORDER:
-            value = VL53L5CX_TargetOrder(ord(result))
-        elif command == SlamdeckCommand.GET_RANGING_MODE:
-            value = VL53L5CX_RangingMode(ord(result))
-        else:
-            # Not getters, must be a setter request.
-
-            # If not OK result, return error.
-            if ord(result) != SlamdeckResult.OK.value:
-                logging.error(f'Slamdeck result error: {result}')
-                result_size = 1
-                return
-            else:
-                if command == SlamdeckCommand.SET_I2C_ADDRESS:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_POWER_MODE:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_RESOLUTION:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_RANGING_FREQUENCY_HZ:
-                    value = ord(data_sent)
-                elif command == SlamdeckCommand.SET_INTEGRATION_TIME_MS:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_SHARPENER_PERCENT:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_TARGET_ORDER:
-                    value = data_sent
-                elif command == SlamdeckCommand.SET_RANGING_MODE:
-                    value = data_sent
-
-        setattr(sensor, attribute, value)
-
-        # Notify sensor subscribers
-        if command == SlamdeckCommand.GET_DATA:
-            sensor.notify_subscribers(attribute, None)
-        else:
-            sensor.notify_subscribers(attribute, value)
-
-        return result_size
-
-    def _cmd_on_complete(self,
-                         command: SlamdeckCommand,
-                         sensor: SlamdeckSensor,
-                         attribute: str,
-                         result: bytes,
-                         data_sent: bytes = None
-            ) -> None:
-
-        if sensor == SlamdeckSensor.ALL:
-            sensors = self.SENORS
-        else:
-            sensors = [sensor]
-
-        result_offset = 0
-        for sensor in sensors:
-            sensor_model = self.get_sensor_model(sensor)
-            result_size = self.get_data_size(sensor_model)
-            self._update_sensor_model(command, sensor_model, attribute, result[result_offset:result_offset+result_size], data_sent)
-            result_offset += result_size
-
-        # If we're continously sampling, we request new data immediately.
-        if self._is_sampling:
-            # Update sampling rate
-            now = time()
-            if (now - self._t0) > 1:
-                self._sampling_rate = self._samples
-                self._samples = 0
-                self._t0 = now
-
-            self._samples += 1
-
-            if command == SlamdeckCommand.GET_DATA:
-                self._cmd_execute(SlamdeckCommand.GET_DATA, sensor, attribute)
-
-    def _cmd_execute(self,
-                     command: SlamdeckCommand,
-                     sensor: SlamdeckSensor,
-                     attribute: str,
-                     data: uint8 = 0
-            ) -> None:
-        if not self._backend.is_connected():
-            logging.error('Slamdeck not connected yet, can\'t issue commands.')
+    def connect(self) -> Thread:
+        if self.is_connected():
+            logger.warning('Already connected to slamdeck.')
             return
 
-        packet = SlamdeckApiPacket(
-            command=command,
-            sensor=sensor,
-            data=data
-        )
-        def _on_complete(result):
-            self._cmd_on_complete(command, sensor, attribute, result, data)
+        if not self._backend.connect():
+            logging.warning('Failed to connected to backend')
+            return
 
-        self._backend.write(packet, _on_complete)
+        # We're connected
+        self._is_streaming = False
+        self.connected_handler.call()
+        return Thread(target=self._run, name='Slamdeck', daemon=True).start()
+
+    def _disconnect(self) -> None:
+        self._is_running.clear()
+        self._is_streaming = False
+        self.disconnected_handler.call()
+
+    def _get_settings(self) -> SlamdeckSettings:
+        action = ActionWrite(SlamdeckCommand.GET_SETTINGS)
+        packet = self._make_packet(action)
+        self._backend.write(packet)
+        response = self._backend.read()
+        self._parse_response(action, response)
+
+    def _clear_action_queue(self) -> None:
+        self._action_queue = Queue()
+
+    def _run(self) -> None:
+        self._is_running.set()
+        self._clear_action_queue()
+        self._get_settings()
+
+        while self._is_running.is_set():
+            action = self._action_queue.get()
+
+            print(action)
+
+            if action.type == ActionType.WRITE:
+                packet = self._make_packet(action)
+                self._backend.write(packet)
+                response = self._backend.read()
+                if response is not None:
+                    self._parse_response(action, response)
+                else:
+                    self._is_streaming = False
+            elif action.type == ActionType.READ_DATA:
+                response = self._backend.read()
+                if response is not None:
+                    self._parse_response(action, response)
+                    self.on_new_data_handler.call()
+
+                    # Update streaming rate
+                    if self._is_streaming:
+                        self._samples += 1
+                        now = time()
+                        if (now - self._t0) > 1:
+                            self._streaming_rate = self._samples
+                            self._samples = 0
+                            self._t0 = now
+                else:
+                    self._is_streaming = False
+
+            elif action.type == ActionType.DISCONNECT:
+                if self._backend.disconnect():
+                    self._disconnect()
+                else:
+                    logger.error('Failed to disconnect!')
+
+            if self._is_streaming:
+                self._action_queue.put(ActionRead(SlamdeckCommand.GET_DATA))
+
+    def _make_packet(self, action: ActionWrite) -> bytes:
+        packet = bytearray([action.command])
+        if action.command == SlamdeckCommand.SET_SETTINGS:
+            packet.extend(action.settings.to_bytes())
+        return packet
+
+    def _parse_response(self, action: Action, response: bytes) -> None:
+        if action.command == SlamdeckCommand.GET_DATA:
+            offset = 0
+            data_size = self._data_size
+            for sensor in self._sensors:
+                data = response[offset:offset+data_size]
+                data_size = len(data)
+                if data:
+                    try:
+                        self._sensors[sensor].data = np.frombuffer(data, dtype=np.int16)
+                        print(self._sensors[sensor].data[0])
+                    except Exception as e:
+                        logger.error(str(e))
+                        self._is_streaming = False
+                offset += data_size
+        elif action.command == SlamdeckCommand.GET_SETTINGS:
+            offset = 0
+            for sensor in self._sensors:
+                self._sensors[sensor].status = ord(response[offset:offset+1])
+                offset += 1
+            self._settings = SlamdeckSettings.from_bytes(response[offset:])
+            print(self._settings)
+        elif action.command == SlamdeckCommand.SET_SETTINGS:
+            for i, sensor in enumerate(self._sensors):
+                self._sensors[sensor].status = ord(response[i])
+        elif action.command == SlamdeckCommand.START_STREAMING:
+            if response[0] != SlamdeckCommand.START_STREAMING_ACK:
+                logging.error('Expected START ACK, got: %d', response[0])
+            else:
+                self._is_streaming = True
+                pass
+        elif action.command == SlamdeckCommand.STOP_STREAMING:
+            if response[0] != SlamdeckCommand.STOP_STREAMING_ACK:
+                logging.error('Expected STOP ACK, got: %d', response[0])
+            else:
+                self._is_streaming = False
+                pass
+
+    def _create_sensors(self) -> t.Dict[SlamdeckSensorId, VL53L5CX]:
+        return {
+            SlamdeckSensorId.MAIN:  VL53L5CX(id=SlamdeckSensorId.MAIN.value),
+            SlamdeckSensorId.FRONT: VL53L5CX(id=SlamdeckSensorId.FRONT.value),
+            SlamdeckSensorId.RIGHT: VL53L5CX(id=SlamdeckSensorId.RIGHT.value),
+            SlamdeckSensorId.BACK:  VL53L5CX(id=SlamdeckSensorId.BACK.value),
+            SlamdeckSensorId.LEFT:  VL53L5CX(id=SlamdeckSensorId.LEFT.value)
+        }
+

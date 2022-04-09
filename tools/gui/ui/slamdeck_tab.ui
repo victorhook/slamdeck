@@ -40,16 +40,16 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnStartSampling">
+        <widget class="QPushButton" name="btnStartStreaming">
          <property name="text">
-          <string>Start sampling</string>
+          <string>Start streaming</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnStopSampling">
+        <widget class="QPushButton" name="btnStopStreaming">
          <property name="text">
-          <string>Stop sampling</string>
+          <string>Stop streaming</string>
          </property>
         </widget>
        </item>
@@ -132,7 +132,7 @@
        <item>
         <widget class="QLabel" name="label_14">
          <property name="text">
-          <string>Sample rate:</string>
+          <string>Streaming sample rate:</string>
          </property>
         </widget>
        </item>

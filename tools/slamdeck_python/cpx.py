@@ -1,10 +1,9 @@
-from curses import def_prog_mode
 from enum import IntEnum
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from slamdeck_python.utils import BinaryPacket
+from slamdeck_python.transport import Transport
 
 
 class CPX_Target(IntEnum):
@@ -24,14 +23,11 @@ class CPX_Function(IntEnum):
 
 
 @dataclass
-class CPX_Routing(BinaryPacket):
+class CPX_Routing:
     destination: CPX_Target
     source: CPX_Target
     function: CPX_Function
     lastPacket: bool = False
-
-    def __len__(self) -> int:
-        return 2
 
     def as_bytes(self) -> bytes:
         return struct.pack(
@@ -41,26 +37,16 @@ class CPX_Routing(BinaryPacket):
         )
 
 @dataclass
-class CPX_Packet(BinaryPacket):
+class CPX_Packet:
     route: CPX_Routing
-    data: BinaryPacket
+    data: bytes
 
     HEADER_SIZE: int = 2
 
     def as_bytes(self) -> bytes:
-        d_type = type(self.data)
-        if d_type is list:
-            data = bytearray(self.data)
-        elif d_type is bytes:
-            data = self.data
-        elif isinstance(self.data, BinaryPacket):
-            data = self.data.as_bytes()
-        else:
-            raise RuntimeError(f'Failed to recognize data type: {d_type} for CPX payload.')
-
-        return struct.pack('H', len(self.data)+2) + \
+        return struct.pack('H', len(self.data)+self.HEADER_SIZE) + \
                self.route.as_bytes() + \
-               data
+               self.data
 
     def __len__(self) -> int:
         return len(self.route) + len(self.data)
@@ -83,3 +69,44 @@ class CPX_Packet(BinaryPacket):
             ),
             data=data[2:]
         )
+
+
+class BackendCPX:
+
+    def __init__(self,
+                 transport: Transport,
+                 route: CPX_Routing = CPX_Routing(
+                     destination=CPX_Target.ESP32,
+                     source=CPX_Target.HOST,
+                     function=CPX_Function.APP
+                 )
+            ) -> None:
+        super().__init__()
+        self._transport = transport
+        self._route = route
+
+    def connect(self) -> bool:
+        return self._transport.connect()
+
+    def disconnect(self) -> bool:
+        return self._transport.disconnect()
+
+    def write(self, data: bytes) -> int:
+        return self._transport.write(
+            CPX_Packet(route=self._route, data=data).as_bytes()
+        )
+
+    def read(self) -> bytes:
+        first_two_bytes = self._transport.read(2)
+        if not first_two_bytes:
+            return
+
+        # First 2 bytes of CPX wifi packet is the packet payload length.
+        size = struct.unpack('H', first_two_bytes)[0]
+        # Next 2 bytes is the CPX header, and the remaining is the app data.
+        data = self._transport.read(size)
+
+        if not data:
+            return
+
+        return data[CPX_Packet.HEADER_SIZE:]

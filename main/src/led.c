@@ -104,7 +104,7 @@ void led_init()
 {
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_LEDS);
-    xTaskCreatePinnedToCore(led_task, "Led Task", 5000, NULL, 2, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
+    xTaskCreate(led_task, "Led Task", 5000, NULL, 2, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_LEDS,

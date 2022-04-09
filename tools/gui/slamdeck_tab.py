@@ -19,28 +19,23 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 import numpy as np
 from  matplotlib.colors import LinearSegmentedColormap, rgb2hex
+from slamdeck_python.transport import Transport
 
 
 from tab import Tab
 from visualizer_3d import Visualizer3d
-from slamdeck_python.slamdeck import Slamdeck
-from slamdeck_python.backend_cpx import BackendCPX, BackendCPXProtocol
-from slamdeck_python.backend import BackendParams, Callback
-from slamdeck_python.backend_ip import BackendIp
-from slamdeck_python.slamdeck import Sensor
-from slamdeck_python.slamdeck_api import SlamdeckSensor, VL53L5CX_PowerMode, VL53L5CX_RangingMode, VL53L5CX_Resolution, VL53L5CX_TargetOrder
-from slamdeck_python.utils import Subscriber, subscriber
-from vispy_tab import VispyTest
+from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, VL53L5CX,
+VL53L5CX_PowerMode, VL53L5CX_RangingMode, VL53L5CX_Resolution, 
+VL53L5CX_Status, VL53L5CX_TargetOrder)
+from slamdeck_python.cpx import BackendCPX
+from slamdeck_python.transport_ip import TransportIp
+from slamdeck_python.utils import Subscriber, subscriber, Callback
 
 
 logger = logging.getLogger(__name__)
 
-example_tab_class = uic.loadUiType(Path(__file__).parent.joinpath('ui/slamdeck_tab.ui'))[0]
+slamdeck_class = uic.loadUiType(Path(__file__).parent.joinpath('ui/slamdeck_tab.ui'))[0]
 
-
-
-t0 = 0
-received = False
 
 class SensorDimension(IntEnum):
     DIMENSION_4X4 = 4
@@ -58,7 +53,7 @@ class SensorUi(QObject, Subscriber):
 
     colors = [QBrush(QColor(rgb2hex(cmap(value)))) for value in range(N+1)]
 
-    def __init__(self, graphics: QGraphicsView, sensor: Sensor, small: bool = False):
+    def __init__(self, graphics: QGraphicsView, sensor: VL53L5CX, small: bool = False):
         QObject.__init__(self)
         self.graphics = graphics
         self.sensor = sensor
@@ -67,46 +62,43 @@ class SensorUi(QObject, Subscriber):
         self.graphics.setInteractive(False)
         self.scene = QGraphicsScene()
         self.graphics.setScene(self.scene)
-        self.dimension = 4
         self._is_small = small
 
         self._s_create_grids.connect(self._create_grids)
 
         # Add subscriptions
+        self.grid_per_row: int = 0
         self.set_sensor(sensor)
+
         self._graph_timer = QTimer()
         self._graph_timer.setInterval(int(1000 / self.FPS))
         self._graph_timer.timeout.connect(self._update_graphics)
-        #self._graph_timer.start()
+        self._graph_timer.start()
 
-    def set_sensor(self, sensor: Sensor):
+    def set_sensor(self, sensor: VL53L5CX):
         self.sensor = sensor
-        self.set_dimension(self.sensor.resolution)
-        self._s_create_grids.emit()
-
-    def set_dimension(self, resolution: VL53L5CX_Resolution) -> None:
-        if resolution == VL53L5CX_Resolution.RESOLUTION_4X4:
-            self.dimension = 4
+        if self.sensor.resolution == VL53L5CX_Resolution.RESOLUTION_4X4:
+            self.grid_per_row = 4
         else:
-            self.dimension = 8
+            self.grid_per_row = 8
+        self._s_create_grids.emit()
 
     def _update_graphics(self) -> None:
         g = 0
         distances = self.sensor.data
 
-        for r in range(self.dimension):
-            for c in range(self.dimension):
-                grid = self.grids[self.dimension-1-r][c]
+        for r in range(self.grid_per_row):
+            for c in range(self.grid_per_row):
+                grid = self.grids[self.grid_per_row-1-r][c]
                 value = distances[g]
                 color_value = N if value >= N else value
                 grid.rect.setBrush(self.colors[color_value])
-                #grid.text.setPlainText(str(value))
                 g += 1
 
     def _create_grids(self) -> t.List[t.List['Grid']]:
         self.scene.clear()
         self.grids: t.List[t.List['Grid']] = []
-        if self.dimension == SensorDimension.DIMENSION_4X4:
+        if self.grid_per_row == SensorDimension.DIMENSION_4X4:
             grid_size = 150
         else:
             grid_size = 70
@@ -114,9 +106,9 @@ class SensorUi(QObject, Subscriber):
         if self._is_small:
             grid_size *= 0.3
 
-        for r in range(self.dimension):
+        for r in range(self.grid_per_row):
             self.grids.append([])
-            for c in range(self.dimension):
+            for c in range(self.grid_per_row):
                 rect = QGraphicsRectItem(c*grid_size, r*grid_size,
                                          grid_size, grid_size)
                 rect.setBrush(self.colors[0])
@@ -135,16 +127,20 @@ class SensorUi(QObject, Subscriber):
         text: QGraphicsTextItem
 
 
-class SlamdeckTab(Tab, example_tab_class):
+class SlamdeckTab(Tab, slamdeck_class):
 
     _s_connecting = pyqtSignal()
     _s_connected = pyqtSignal()
     _s_disconnected = pyqtSignal()
     _s_connection_error = pyqtSignal(str)
     _s_on_new_data = pyqtSignal()
-    _s_update_sensor_config_ui = pyqtSignal(Sensor)
+    _s_update_sensor_config_ui = pyqtSignal(VL53L5CX)
 
     PACKET_SIZE = 640
+    UPDATE_FREQUENCY = 30
+
+    DEFAULT_IP = '192.168.0.24'
+    DEFAULT_PORT = '5000'
 
     def __init__(self, tabWidget, helper, *args):
         super(SlamdeckTab, self).__init__(*args)
@@ -155,8 +151,8 @@ class SlamdeckTab(Tab, example_tab_class):
         self.btnConnect.clicked.connect(self._connect)
         self.btnDisconnect.clicked.connect(self._disconnect)
         self.btnTest.clicked.connect(self._test)
-        self.btnStartSampling.clicked.connect(self._start_sampling)
-        self.btnStopSampling.clicked.connect(self._stop_sampling)
+        self.btnStartStreaming.clicked.connect(self._start_streaming)
+        self.btnStopStreaming.clicked.connect(self._stop_streaming)
 
         self.findChild(QPushButton, 'btnSetSensor').clicked.connect(self._set)
         self.findChild(QPushButton, 'btnUpdateConfig').clicked.connect(self._get_sensor_config)
@@ -190,13 +186,9 @@ class SlamdeckTab(Tab, example_tab_class):
         #self.v = VispyTest()
         self.graphics3dVisualizer: QFrame = self.findChild(QFrame, 'graphics3dVisualizer')
 
-
-        #self.v.show()
-
-        self.editIp = self.findChild(QLineEdit, 'editIp')
         self.editPort = self.findChild(QLineEdit, 'editPort')
 
-        self._string_to_sensor = {sensor.name: sensor.value for sensor in SlamdeckSensor}
+        self._string_to_sensor = {sensor.name: sensor.value for sensor in SlamdeckSensorId}
         self._string_to_power_mode = {mode.name: mode.value for mode in VL53L5CX_PowerMode}
         self._string_to_resolution = {res.name: res.value for res in VL53L5CX_Resolution}
         self._string_to_target_order = {target.name: target.value for target in VL53L5CX_TargetOrder}
@@ -205,46 +197,47 @@ class SlamdeckTab(Tab, example_tab_class):
         self._populate_comboboxes()
         self._set_default_values()
 
-        self.slamdeck = Slamdeck(BackendCPX(BackendIp(self._get_ip(), self._get_port())))
+        self.slamdeck = Slamdeck(BackendCPX(TransportIp(self._get_ip(), self._get_port())))
 
         # Attach callbacks for Slamdeck to trigger PyQt signals
-        self.slamdeck.add_cb_connecting(Callback(self._s_connecting.emit))
-        self.slamdeck.add_cb_connected(Callback(self._s_connected.emit))
-        self.slamdeck.add_cb_connection_error(Callback(self._s_connection_error.emit))
-        self.slamdeck.add_cb_disconnected(Callback(self._s_disconnected.emit))
-        self.slamdeck.add_cb_on_new_data(Callback(self._s_on_new_data.emit))
+        self.slamdeck.connecting_handler.add_callback(Callback(self._s_connecting.emit))
+        self.slamdeck.connected_handler.add_callback(Callback(self._s_connected.emit))
+        self.slamdeck.connection_error_handler.add_callback(Callback(self._s_connection_error.emit))
+        self.slamdeck.disconnected_handler.add_callback(Callback(self._s_disconnected.emit))
+        self.slamdeck.on_new_data_handler.add_callback(Callback(self._s_on_new_data.emit))
 
         # Build sensor UI graphics.
-        self.sensor_single = SensorUi(self.singleSensor, self.slamdeck.get_sensor_model(SlamdeckSensor.BACK))
-        self.sensor_front = SensorUi(self.sensorFront, self.slamdeck.get_sensor_model(SlamdeckSensor.FRONT), small=True)
-        self.sensor_main = SensorUi(self.sensorMain, self.slamdeck.get_sensor_model(SlamdeckSensor.MAIN), small=True)
-        self.sensor_right = SensorUi(self.sensorRight, self.slamdeck.get_sensor_model(SlamdeckSensor.RIGHT), small=True)
-        self.sensor_back = SensorUi(self.sensorBack, self.slamdeck.get_sensor_model(SlamdeckSensor.BACK), small=True)
-        self.sensor_left = SensorUi(self.sensorLeft, self.slamdeck.get_sensor_model(SlamdeckSensor.LEFT), small=True)
+        self.sensor_single = SensorUi(self.singleSensor, self.slamdeck.get_sensor(SlamdeckSensorId.BACK))
+        self.sensor_front = SensorUi(self.sensorFront, self.slamdeck.get_sensor(SlamdeckSensorId.FRONT), small=True)
+        self.sensor_main = SensorUi(self.sensorMain, self.slamdeck.get_sensor(SlamdeckSensorId.MAIN), small=True)
+        self.sensor_right = SensorUi(self.sensorRight, self.slamdeck.get_sensor(SlamdeckSensorId.RIGHT), small=True)
+        self.sensor_back = SensorUi(self.sensorBack, self.slamdeck.get_sensor(SlamdeckSensorId.BACK), small=True)
+        self.sensor_left = SensorUi(self.sensorLeft, self.slamdeck.get_sensor(SlamdeckSensorId.LEFT), small=True)
 
         self._update_button_states(connected=False)
 
         config_sensor = self._current_sensor()
-        if config_sensor == SlamdeckSensor.ALL:
+        if config_sensor == SlamdeckSensorId.ALL:
             config_sensor = self.slamdeck.SENORS[0]
-        self._cb_update_sensor_config_ui(self.slamdeck.get_sensor_model(config_sensor))
+        self._cb_update_sensor_config_ui(self.slamdeck.get_sensor(config_sensor))
 
         # Create 3d visualizer, which must be done after slamdeck instantiation
         self.visualizer_3d = Visualizer3d(self.slamdeck)
         lay = QVBoxLayout(self.graphics3dVisualizer)
         lay.addWidget(self.visualizer_3d.native)
 
-        # Create sampling thread reference
-        self._t0 = time.time()
-        self._samples = 0
+        self._graph_timer = QTimer()
+        self._graph_timer.setInterval(int(1000 / self.UPDATE_FREQUENCY))
+        self._graph_timer.timeout.connect(self._update_ui)
+        self._graph_timer.start()
 
-    def _current_sensor(self) -> SlamdeckSensor:
+    def _current_sensor(self) -> SlamdeckSensorId:
         try:
             sensor_tab = self._get_active_sensor_tab()
             if sensor_tab == 'tabSingleSensor':
-                sensor = SlamdeckSensor(self._string_to_sensor[self.comboSensor.currentText()])
+                sensor = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
             elif sensor_tab == 'tabAllSensor':
-                sensor = SlamdeckSensor.ALL
+                sensor = SlamdeckSensorId.ALL
             return sensor
         except Exception as e:
             logging.error(f'Error getting current sensor: {e}')
@@ -257,47 +250,24 @@ class SlamdeckTab(Tab, example_tab_class):
         return int(self.editPort.text())
 
     def _set_default_values(self) -> None:
-        self.editIp.setText('192.168.6.83')
-        self.editPort.setText('5000')
+        self.editIp.setText(self.DEFAULT_IP)
+        self.editPort.setText(self.DEFAULT_PORT)
 
     def _get_sensor_config(self) -> None:
         config_sensor = self._current_sensor()
-        if config_sensor == SlamdeckSensor.ALL:
-            # If ALL sensors is set, just get the first one for the configs (all will have same configs.)
-            config_sensor = self.slamdeck.SENORS[0]
+        pass
 
-        sensor_model = self.slamdeck.get_initial_sensor_settings(config_sensor)
-        sensor_model.subscribe_to_all(self)
-
-    def _cb_update_sensor_config_ui(self, sensor_model: Sensor) -> None:
-        self.editRangingFrequency.setText(str(sensor_model.ranging_frequency_hz))
-        self.editIntegrationTime.setText(str(sensor_model.integration_time_ms))
-        self.editSharpener.setText(str(sensor_model.sharpener_percent))
-        self.comboPowerMode.setCurrentText(sensor_model.power_mode.name)
-        self.comboResolution.setCurrentText(sensor_model.resolution.name)
-        self.comboTargerOrder.setCurrentText(sensor_model.target_order.name)
-        self.comboRangingMode.setCurrentText(sensor_model.ranging_mode.name)
-
-    def on_change_all(self, attr: str, value: object):
-        print('------------ ON CHANGE -------------')
-
-        if attr == 'resolution':
-            self._update_sensor_plot()
-
-        """
-        sensors = []
-        sensor = self._current_sensor()
-        if sensor == SlamdeckSensor.ALL:
-            sensors = self.slamdeck.SENORS
-        else:
-            sensors.append(sensor)
-
-        for sensor in sensors:
-            sensor_model = self.slamdeck.get_sensor_model(sensor)
-            """
+    def _cb_update_sensor_config_ui(self, sensor: VL53L5CX) -> None:
+        self.editRangingFrequency.setText(str(sensor.ranging_frequency_hz))
+        self.editIntegrationTime.setText(str(sensor.integration_time_ms))
+        self.editSharpener.setText(str(sensor.sharpener_percent))
+        self.comboPowerMode.setCurrentText(sensor.power_mode.name)
+        self.comboResolution.setCurrentText(sensor.resolution.name)
+        self.comboTargerOrder.setCurrentText(sensor.target_order.name)
+        self.comboRangingMode.setCurrentText(sensor.ranging_mode.name)
 
     def _set(self) -> None:
-        sensor = SlamdeckSensor(self._string_to_sensor[self.comboSensor.currentText()])
+        sensor = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
         power_mode = VL53L5CX_PowerMode(self._string_to_power_mode[self.comboPowerMode.currentText()])
         resolution = VL53L5CX_Resolution(self._string_to_resolution[self.comboResolution.currentText()])
         target_order = self._string_to_target_order[self.comboTargerOrder.currentText()]
@@ -317,15 +287,6 @@ class SlamdeckTab(Tab, example_tab_class):
             f'sharpener: {sharpener}\n'
         )
         """
-        self.slamdeck.get_sensor_model(sensor).subscribe_to_all(self)
-        #self.slamdeck.set_power_mode(sensor, power_mode)
-        self.slamdeck.set_resolution(sensor, resolution)
-        self.slamdeck.set_ranging_frequency_hz(sensor, ranging_frequency)
-        #self.slamdeck.set_target_order(sensor, target_order)
-        #self.slamdeck.set_ranging_mode(sensor, ranging_mode)
-        #self.slamdeck.set_integration_time_ms(sensor, integration_time)
-        #self.slamdeck.set_sharpener_percent(sensor, sharpener)
-        #self.slamdeck.set_resolution(sensor, resolution)
 
     def _populate_comboboxes(self) -> None:
         self.comboSensor.addItems(self._string_to_sensor.keys())
@@ -337,43 +298,35 @@ class SlamdeckTab(Tab, example_tab_class):
     def _get_active_sensor_tab(self) -> str:
         return self.tabSensorGraphics.currentWidget().objectName()
 
-    def _start_sampling(self) -> None:
-        self.slamdeck.start_sampling(SlamdeckSensor.BACK)
+    def _start_streaming(self) -> None:
+        self.slamdeck.start_streaming()
 
-    def _stop_sampling(self) -> None:
-        self.slamdeck.stop_sampling()
-
-    def _update_sensor_plot(self) -> None:
-        sensor = self._current_sensor()
-        sensor_model = self.slamdeck.get_sensor_model(sensor)
-        sensor_model.subscribe_to_all(self)
+    def _stop_streaming(self) -> None:
+        self.slamdeck.stop_streaming()
 
     def _test(self) -> None:
         sensor = self._current_sensor(self._current_sensor())
-        self.slamdeck.get_data_from_sensor(sensor)
-        #self.sensor_single.set_sensor(self.slamdeck.get_sensor_model(sensor))
-        #self.slamdeck.get_data_from_sensor(sensor)
+        pass
 
     def _connect(self) -> None:
         self.i = 0
         self.t0 = 0
 
         # TODO: Fix his private attribute access
-        self.slamdeck._backend._ip = self._get_ip()
-        self.slamdeck._backend._port = self._get_port()
         if not self.slamdeck.is_connected():
+            self.slamdeck._backend._transport._ip = self._get_ip()
+            self.slamdeck._backend._transport._port = self._get_port()
             self.slamdeck.connect()
 
     def _disconnect(self) -> None:
         self.slamdeck.disconnect()
 
+    def _update_ui(self) -> None:
+        self.labelSampleRate.setText(str(self.slamdeck.get_streaming_rate()))
+
     # --- Callbacks -- #
     def _cb_on_new_data(self) -> None:
-        update_3d = (1 / self.visualizer_3d.FPS)
-        self._s_set_sampling_rate.emit(self.slamdeck.get_sampling_rate())
-    # TODO, update cylce instead?
-    def _set_sampling_rate(self, sampling_rate: int) -> None:
-        self.labelSampleRate.setText(str())
+        pass
 
     def _cb_connecting(self) -> None:
         logger.debug('Connecting...')
@@ -393,7 +346,8 @@ class SlamdeckTab(Tab, example_tab_class):
         self.btnDisconnect.setEnabled(connected)
         self.btnConnect.setEnabled(not connected)
         self.btnTest.setEnabled(connected)
-        self.btnStartSampling.setEnabled(connected)
+        self.btnStartStreaming.setEnabled(connected)
+        self.btnStopStreaming.setEnabled(connected)
 
     def _cb_connection_error(self, msg: str):
         logger.debug(f'Error: {msg}')

@@ -38,6 +38,7 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
+#include "slamdeck.h"
 
 
 
@@ -111,7 +112,7 @@ static void uart_tx_task(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_TX_RUNNING);
 
   do {
-    uart_write_bytes(UART_NUM_0, &ctr, sizeof(ctr));
+    uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
     vTaskDelay(10);
     evBits = xEventGroupGetBits(evGroup);
   } while ((evBits & CTS_EVENT) != CTS_EVENT);
@@ -128,7 +129,7 @@ static void uart_tx_task(void* _param) {
                                 portMAX_DELAY);
       if ((evBits & CTR_EVENT) == CTR_EVENT) {
         ESP_LOGD("UART", "Sent CTR");
-        uart_write_bytes(UART_NUM_0, &ctr, sizeof(ctr));
+        uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
       }
     }
 
@@ -150,11 +151,11 @@ static void uart_tx_task(void* _param) {
                                 portMAX_DELAY);
         if ((evBits & CTR_EVENT) == CTR_EVENT) {
           ESP_LOGD("UART", "Sent CTR");
-          uart_write_bytes(UART_NUM_0, &ctr, sizeof(ctr));
+          uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
         }
       } while ((evBits & CTS_EVENT) != CTS_EVENT);
       ESP_LOGD("UART", "Sending packet");
-      uart_write_bytes(UART_NUM_0, &txp, txp.payloadLength + UART_META_LENGTH);
+      uart_write_bytes(SLAMDECK_UART_CF, &txp, txp.payloadLength + UART_META_LENGTH);
     }
   }
 }
@@ -165,16 +166,16 @@ static void uart_rx_task(void* _param) {
 
   while(1) {
     do {
-      uart_read_bytes(UART_NUM_0, &rxp.start, 1, portMAX_DELAY);
+      uart_read_bytes(SLAMDECK_UART_CF, &rxp.start, 1, portMAX_DELAY);
     } while (rxp.start != 0xFF);
 
-    uart_read_bytes(UART_NUM_0, &rxp.payloadLength, 1, portMAX_DELAY);
+    uart_read_bytes(SLAMDECK_UART_CF, &rxp.payloadLength, 1, portMAX_DELAY);
 
     if (rxp.payloadLength == 0) {
       ESP_LOGD("UART", "Received CTS");
       xEventGroupSetBits(evGroup, CTS_EVENT);
     } else {
-      uart_read_bytes(UART_NUM_0, rxp.payload, rxp.payloadLength + UART_CRC_LENGTH, portMAX_DELAY);
+      uart_read_bytes(SLAMDECK_UART_CF, rxp.payload, rxp.payloadLength + UART_CRC_LENGTH, portMAX_DELAY);
       assert (rxp.payload[rxp.payloadLength] == calcCrc(&rxp));
 
       ESP_LOGD("UART", "Received packet");
@@ -207,14 +208,14 @@ void uart_transport_init() {
         //.source_clk = UART_SCLK_APB,
     };
     // We won't use a buffer for sending data.
-    uart_driver_install(UART_NUM_0, UART_TRANSPORT_MTU * 2, UART_TRANSPORT_MTU * 2, 0, NULL, 0);
-    uart_param_config(UART_NUM_0, &uart_config);
-    uart_set_pin(UART_NUM_0, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_driver_install(SLAMDECK_UART_CF, UART_TRANSPORT_MTU * 2, UART_TRANSPORT_MTU * 2, 0, NULL, 0);
+    uart_param_config(SLAMDECK_UART_CF, &uart_config);
+    uart_set_pin(SLAMDECK_UART_CF, SLAMDECK_UART_TX1, SLAMDECK_UART_RX1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     // Launching communication tasks
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_RX_RUNNING | START_UP_TX_RUNNING);
-    xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 1, NULL);
+    xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 3, NULL);
     ESP_LOGI("UART", "Waiting for RX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_RX_RUNNING,
@@ -227,7 +228,7 @@ void uart_transport_init() {
     // CTR and miss CTS (which means that the STM32 will stop sending CTS
     // too early and we cannot sync)
 
-    xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 1, NULL);
+    xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 3, NULL);
     ESP_LOGI("UART", "Waiting for TX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_TX_RUNNING,
@@ -236,6 +237,7 @@ void uart_transport_init() {
                         portMAX_DELAY);
 
     ESP_LOGI("UART", "Transport initialized");
+
 }
 
 void uart_transport_send(const CPXRoutablePacket_t* packet) {

@@ -52,8 +52,8 @@ static esp_err_t i2c_init_master(void)
         .mode = I2C_MODE_MASTER,
         .sda_io_num = SLAMDECK_I2C_SDA,
         .scl_io_num = SLAMDECK_I2C_SCL,
-        .sda_pullup_en = GPIO_PULLUP_DISABLE,
-        .scl_pullup_en = GPIO_PULLUP_DISABLE,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = SLAMDECK_I2C_MASTER_FREQ_HZ,
     };
 

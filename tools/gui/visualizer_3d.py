@@ -9,17 +9,10 @@ from collections import namedtuple
 import time
 from PyQt5 import uic
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QMessageBox
-from PyQt5.QtWidgets import QLabel
-from slamdeck_python.slamdeck import Sensor, Slamdeck
-from slamdeck_python.slamdeck_api import SlamdeckSensor
+from slamdeck_python.slamdeck import Slamdeck, SlamdeckSensorId, VL53L5CX
 import math
 from  matplotlib.colors import LinearSegmentedColormap, rgb2hex
 from timeit import default_timer as timer
-
-from tab import Tab
-
-from pathlib import Path
 
 from vispy import scene
 import numpy as np
@@ -29,76 +22,15 @@ import typing as t
 
 
 logger = logging.getLogger(__name__)
-example_tab_class = uic.loadUiType(Path(__file__).parent.joinpath('ui/slamdeck_tab.ui'))[0]
-
-STYLE_RED_BACKGROUND = "background-color: lightpink;"
-STYLE_GREEN_BACKGROUND = "background-color: lightgreen;"
-STYLE_NO_BACKGROUND = "background-color: none;"
-
-
-class Anchor:
-    def __init__(self, x=0.0, y=0.0, z=0.0, distance=0.0):
-        self.x = x
-        self.y = y
-        self.z = z
-        self._is_position_valid = False
-        self._is_active = False
-        self.distance = distance
-
-    def set_position(self, position):
-        """Sets the position."""
-        self.x = position[0]
-        self.y = position[1]
-        self.z = position[2]
-        self._is_position_valid = True
-
-    def get_position(self):
-        """Returns the position as a vector"""
-        return (self.x, self.y, self.z)
-
-    def is_position_valid(self):
-        return self._is_position_valid
-
-    def set_is_active(self, is_active):
-        self._is_active = is_active
-
-    def is_active(self):
-        return self._is_active
-
-
-class AxisScaleStep:
-    def __init__(self, from_view, from_axis, to_view, to_axis,
-                 center_only=False):
-        self.from_view = from_view.view
-        self.from_axis = from_axis
-        self.to_view = to_view.view
-        self.to_axis = to_axis
-        self.center_only = center_only
 
 
 class Visualizer3d(scene.SceneCanvas):
-    ANCHOR_BRUSH = np.array((0.2, 0.5, 0.2))
-    ANCHOR_BRUSH_INVALID = np.array((0.8, 0.5, 0.5))
-    HIGHLIGHT_ANCHOR_BRUSH = np.array((0, 1, 0))
-    POSITION_BRUSH = np.array((0, 0, 1.0))
-
     COLOR_POINT_CLOUD = np.array((0, 1.0, 0, 0))
-
-    VICINITY_DISTANCE = 2.5
-    HIGHLIGHT_DISTANCE = 0.5
-
-    LABEL_SIZE = 100
-    LABEL_HIGHLIGHT_SIZE = 200
-
-    ANCHOR_SIZE = 10
-    HIGHLIGHT_SIZE = 20
-
+    COLOR_CRAZYFLIE = np.array((1.0, 1.0, 0, 0))
     FPS = 60
     FOV = 45
     MAX_DISTANCE = 4000
     cmap = LinearSegmentedColormap.from_list('rg',["r", "w", "g"], N=MAX_DISTANCE)
-
-    TEXT_OFFSET = np.array((0.0, 0, 0.25))
 
     def __init__(self, slamdeck: Slamdeck):
         scene.SceneCanvas.__init__(self, keys=None)
@@ -116,7 +48,7 @@ class Visualizer3d(scene.SceneCanvas):
         self._cf = scene.visuals.Markers(
             pos=self._cf_pos,
             parent=self._view.scene,
-            face_color=self.POSITION_BRUSH
+            face_color=self.COLOR_CRAZYFLIE
         )
         self._anchor_contexts = {}
 
@@ -135,16 +67,16 @@ class Visualizer3d(scene.SceneCanvas):
         self.addArrows(1, 0.02, 0.1, 0.1, self._view.scene)
 
         self._sensor_directions = {
-            SlamdeckSensor.MAIN.value:  (np.array([1, 0, 0]), np.array([0, 1, 0])),
-            SlamdeckSensor.FRONT.value: (1,  0,  0),
-            SlamdeckSensor.RIGHT.value: (0,  1,  1),
-            SlamdeckSensor.BACK.value:  (-1, 0,  0),
-            SlamdeckSensor.LEFT.value:  (0,  -1, 0)
+            SlamdeckSensorId.MAIN.value:  (np.array([1, 0, 0]), np.array([0, 1, 0])),
+            SlamdeckSensorId.FRONT.value: (1,  0,  0),
+            SlamdeckSensorId.RIGHT.value: (0,  1,  1),
+            SlamdeckSensorId.BACK.value:  (-1, 0,  0),
+            SlamdeckSensorId.LEFT.value:  (0,  -1, 0)
         }
 
         # Subscribe to models
         self.slamdeck = slamdeck
-        self.sensor_front = self.slamdeck.get_sensor_model(SlamdeckSensor.BACK)
+        self.sensor_front = self.slamdeck.get_sensor(SlamdeckSensorId.BACK)
 
         # Set grid size and pixel offset
         self.grids = self.sensor_front.resolution.value
@@ -203,7 +135,7 @@ class Visualizer3d(scene.SceneCanvas):
         #print(coordinate)
 
 
-    def _create_point_cloud(self) -> t.Dict[SlamdeckSensor, scene.visuals.Markers]:
+    def _create_point_cloud(self) -> t.Dict[SlamdeckSensorId, scene.visuals.Markers]:
         coordinates = np.ndarray((5, self.grids, 3))
         colors = np.ndarray((5, self.grids, 4))
 
@@ -211,16 +143,16 @@ class Visualizer3d(scene.SceneCanvas):
             self._fill_sensor_coordinates(sensor, coordinates[sensor.id], colors[sensor.id])
 
         point_cloud =  scene.visuals.Markers(
-            pos=np.array(coordinates[SlamdeckSensor.BACK]),
+            pos=np.array(coordinates[SlamdeckSensorId.BACK]),
             parent=self._view.scene,
-            face_color=colors[SlamdeckSensor.BACK]
+            face_color=colors[SlamdeckSensorId.BACK]
         )
 
         self.point_cloud = point_cloud
         self.coordinates = coordinates
         return coordinates, colors, point_cloud
 
-    def _fill_sensor_coordinates(self, sensor: Sensor, coordinates_to_fill: np.ndarray, colors_to_fill: np.ndarray):
+    def _fill_sensor_coordinates(self, sensor: VL53L5CX, coordinates_to_fill: np.ndarray, colors_to_fill: np.ndarray):
         grid = 0
         for row in range(self.grid_size):
             for col in range(self.grid_size):
@@ -229,10 +161,10 @@ class Visualizer3d(scene.SceneCanvas):
                 colors_to_fill[grid] = self._get_color(sensor.data[grid])
                 grid += 1
 
-    def _update_point_cloud(self, sensor: SlamdeckSensor, points: np.ndarray) -> None:
+    def _update_point_cloud(self, sensor: SlamdeckSensorId, points: np.ndarray) -> None:
         self.point_cloud[sensor]
 
-    def _rotate_point_cloud(self, sensor: SlamdeckSensor, points: np.ndarray) -> None:
+    def _rotate_point_cloud(self, sensor: SlamdeckSensorId, points: np.ndarray) -> None:
         np.rot90(points, 1, self._sensor_directions[sensor.value])
 
     k = 0
@@ -243,7 +175,7 @@ class Visualizer3d(scene.SceneCanvas):
 
         dt = now - self.t0
         if dt > 1:
-            print('FPS', self.k)
+            #print('FPS', self.k)
             self.t0 = now
             self.k = 0
 
@@ -251,8 +183,8 @@ class Visualizer3d(scene.SceneCanvas):
         grids = self.sensor_front.resolution.value
         grid_size = int(np.sqrt(grids))
 
-        coordinates_front = self.coordinates[SlamdeckSensor.BACK]
-        colors = self.colors[SlamdeckSensor.BACK]
+        coordinates_front = self.coordinates[SlamdeckSensorId.BACK]
+        colors = self.colors[SlamdeckSensorId.BACK]
         t0 = time.time()
         self._fill_sensor_coordinates(self.sensor_front, coordinates_front, colors)
         #print(f'{(time.time() - t0)*1000:.3} ms', end=' ')

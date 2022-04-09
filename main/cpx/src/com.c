@@ -98,7 +98,7 @@ void com_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_RX_TASK);
-  xTaskCreatePinnedToCore(com_rx, "COM RX", 5000, NULL, 3, NULL, SLAMDECK_NOT_SENSOR_HANDLING_CORE);
+  xTaskCreate(com_rx, "COM RX", 5000, NULL, 3, NULL);
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_RX_TASK,
                       pdTRUE, // Clear bits before returning
