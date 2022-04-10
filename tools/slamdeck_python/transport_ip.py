@@ -39,6 +39,7 @@ class TransportIp(Transport):
             logger.error('Already disconnected from socket')
             return False
 
+        self._sock.shutdown(socket.SHUT_RDWR)
         self._sock.close()
         self._sock = None
         return True

@@ -28,9 +28,7 @@ class SlamdeckCommand(IntEnum):
     GET_SETTINGS        = 1
     SET_SETTINGS        = 2
     START_STREAMING     = 3
-    START_STREAMING_ACK = 4
-    STOP_STREAMING      = 5
-    STOP_STREAMING_ACK  = 6
+    STOP_STREAMING      = 4
 
 class SlamdeckResult(IntEnum):
     OK             = 0
@@ -43,9 +41,6 @@ class SlamdeckSensorId(IntEnum):
     RIGHT   = 2
     BACK    = 3
     LEFT    = 4
-    ALL     = 5
-    NOT_SET = 255
-
 
 @dataclass
 class SlamdeckSettings:
@@ -82,38 +77,13 @@ class SlamdeckSettings:
             VL53L5CX_RangingMode(params[6]),
         )
 
-class ActionType(IntEnum):
-    READ_DATA       = 0
-    WRITE      = 1
-    DISCONNECT = 3
-
-class Action:
-
-    def __init__(self, type: ActionType):
-        self.type = type
-
-    def __repr__(self) -> str:
-        return self.type.name
-
-class ActionWrite(Action):
-
-    def __init__(self, command: SlamdeckCommand, data: bytes = None):
-        super().__init__(type=ActionType.WRITE)
-        self.command = command
-        self.data = data
-
-    def __repr__(self) -> str:
-        return super().__repr__() + str(self.command)
-
-class ActionRead(Action):
-
-    def __init__(self, command: SlamdeckCommand):
-        super().__init__(type=ActionType.READ_DATA)
-        self.command = command
-
-    def __repr__(self) -> str:
-        return super().__repr__() + str(self.command)
-
+class Action(IntEnum):
+    GET_DATA            = 0
+    GET_SETTINGS        = 1
+    SET_SETTINGS        = 2
+    START_STREAMING     = 3
+    STOP_STREAMING      = 4
+    DISCONNECT          = 5
 
 
 class Slamdeck:
@@ -161,6 +131,10 @@ class Slamdeck:
     def get_sensor(self, sensor: SlamdeckSensorId) -> VL53L5CX:
         return self._sensors.get(sensor, None)
 
+    def set_settings(self, settings: SlamdeckSettings) -> None:
+        self._settings = settings
+        self._action_queue.put(Action.SET_SETTINGS)
+
     def is_connected(self) -> bool:
         return self._is_running.is_set()
 
@@ -170,14 +144,14 @@ class Slamdeck:
             return
 
         self._is_streaming = True
-        self._action_queue.put(ActionWrite(SlamdeckCommand.START_STREAMING))
+        self._action_queue.put(Action.START_STREAMING)
 
     def stop_streaming(self) -> None:
         self._is_streaming = False
-        self._action_queue.put(ActionWrite(SlamdeckCommand.STOP_STREAMING))
+        self._action_queue.put(Action.STOP_STREAMING)
 
     def disconnect(self) -> None:
-        self._action_queue.put(Action(type=ActionType.DISCONNECT))
+        self._action_queue.put(Action.DISCONNECT)
 
     def connect(self) -> Thread:
         if self.is_connected():
@@ -194,16 +168,12 @@ class Slamdeck:
         return Thread(target=self._run, name='Slamdeck', daemon=True).start()
 
     def _disconnect(self) -> None:
+        if not self._backend.disconnect():
+            logger.error('Error during disconnect!')
+        logger.debug('Disconnected')
         self._is_running.clear()
         self._is_streaming = False
         self.disconnected_handler.call()
-
-    def _get_settings(self) -> SlamdeckSettings:
-        action = ActionWrite(SlamdeckCommand.GET_SETTINGS)
-        packet = self._make_packet(action)
-        self._backend.write(packet)
-        response = self._backend.read()
-        self._parse_response(action, response)
 
     def _clear_action_queue(self) -> None:
         self._action_queue = Queue()
@@ -215,86 +185,95 @@ class Slamdeck:
 
         while self._is_running.is_set():
             action = self._action_queue.get()
-
             print(action)
 
-            if action.type == ActionType.WRITE:
-                packet = self._make_packet(action)
-                self._backend.write(packet)
-                response = self._backend.read()
-                if response is not None:
-                    self._parse_response(action, response)
-                else:
-                    self._is_streaming = False
-            elif action.type == ActionType.READ_DATA:
-                response = self._backend.read()
-                if response is not None:
-                    self._parse_response(action, response)
-                    self.on_new_data_handler.call()
-
-                    # Update streaming rate
-                    if self._is_streaming:
-                        self._samples += 1
-                        now = time()
-                        if (now - self._t0) > 1:
-                            self._streaming_rate = self._samples
-                            self._samples = 0
-                            self._t0 = now
-                else:
-                    self._is_streaming = False
-
-            elif action.type == ActionType.DISCONNECT:
-                if self._backend.disconnect():
-                    self._disconnect()
-                else:
-                    logger.error('Failed to disconnect!')
+            if action == Action.DISCONNECT:
+               self._disconnect()
+               continue
+            else:
+                if action == Action.GET_DATA:
+                    self._get_data()
+                elif action == Action.GET_SETTINGS:
+                    self._get_settings()
+                elif action == Action.SET_SETTINGS:
+                    self._set_settings()
+                elif action == Action.START_STREAMING:
+                    self._start_streaming()
+                elif action == Action.STOP_STREAMING:
+                    self._stop_streaming()
 
             if self._is_streaming:
-                self._action_queue.put(ActionRead(SlamdeckCommand.GET_DATA))
+                self._action_queue.put(Action.GET_DATA)
 
-    def _make_packet(self, action: ActionWrite) -> bytes:
-        packet = bytearray([action.command])
-        if action.command == SlamdeckCommand.SET_SETTINGS:
-            packet.extend(action.settings.to_bytes())
+    def _get_data(self) -> None:
+        response = self._backend.read()
+        if response is not None:
+            self._parse_get_data(response)
+            self.on_new_data_handler.call()
+
+            # Update streaming rate
+            if self._is_streaming:
+                self._samples += 1
+                now = time()
+                if (now - self._t0) > 1:
+                    self._streaming_rate = self._samples
+                    self._samples = 0
+                    self._t0 = now
+        else:
+            self._is_streaming = False
+
+    def _get_settings(self) -> None:
+        self._backend.write(self._make_packet(SlamdeckCommand.GET_SETTINGS))
+        response = self._backend.read()
+        if response is None:
+            logger.error('No response when getting settings')
+            self._disconnect()
+            return
+
+        offset = 0
+        for sensor in self._sensors:
+            self._sensors[sensor].status = VL53L5CX_Status(response[offset])
+            offset += 1
+        self._settings = SlamdeckSettings.from_bytes(response[offset:])
+        print(self._settings)
+
+    def _set_settings(self) -> None:
+        self._backend.write(self._make_packet(SlamdeckCommand.SET_SETTINGS, self._settings.to_bytes()))
+        response = self._backend.read()
+        if response is None:
+            logger.error('No response when getting settings')
+            return
+        for i, sensor in enumerate(self._sensors):
+            self._sensors[sensor].status = VL53L5CX_Status(response[i])
+
+    def _start_streaming(self) -> None:
+        self._backend.write(self._make_packet(SlamdeckCommand.START_STREAMING))
+        self._is_streaming = True
+
+    def _stop_streaming(self) -> None:
+        self._backend.write(self._make_packet(SlamdeckCommand.STOP_STREAMING))
+        self._is_streaming = False
+
+    def _parse_get_data(self, response: bytes) -> None:
+        offset = 0
+        data_size = self._data_size
+        for sensor in self._sensors:
+            data = response[offset:offset+data_size]
+            data_size = len(data)
+            if data:
+                try:
+                    self._sensors[sensor].data = np.frombuffer(data, dtype=np.int16)
+                    #print(self._sensors[sensor].data[0])
+                except Exception as e:
+                    logger.error(str(e))
+                    self._is_streaming = False
+            offset += data_size
+
+    def _make_packet(self, command: SlamdeckCommand, data: bytes = None) -> bytes:
+        packet = bytearray([command])
+        if data is not None:
+            packet.extend(data)
         return packet
-
-    def _parse_response(self, action: Action, response: bytes) -> None:
-        if action.command == SlamdeckCommand.GET_DATA:
-            offset = 0
-            data_size = self._data_size
-            for sensor in self._sensors:
-                data = response[offset:offset+data_size]
-                data_size = len(data)
-                if data:
-                    try:
-                        self._sensors[sensor].data = np.frombuffer(data, dtype=np.int16)
-                        print(self._sensors[sensor].data[0])
-                    except Exception as e:
-                        logger.error(str(e))
-                        self._is_streaming = False
-                offset += data_size
-        elif action.command == SlamdeckCommand.GET_SETTINGS:
-            offset = 0
-            for sensor in self._sensors:
-                self._sensors[sensor].status = ord(response[offset:offset+1])
-                offset += 1
-            self._settings = SlamdeckSettings.from_bytes(response[offset:])
-            print(self._settings)
-        elif action.command == SlamdeckCommand.SET_SETTINGS:
-            for i, sensor in enumerate(self._sensors):
-                self._sensors[sensor].status = ord(response[i])
-        elif action.command == SlamdeckCommand.START_STREAMING:
-            if response[0] != SlamdeckCommand.START_STREAMING_ACK:
-                logging.error('Expected START ACK, got: %d', response[0])
-            else:
-                self._is_streaming = True
-                pass
-        elif action.command == SlamdeckCommand.STOP_STREAMING:
-            if response[0] != SlamdeckCommand.STOP_STREAMING_ACK:
-                logging.error('Expected STOP ACK, got: %d', response[0])
-            else:
-                self._is_streaming = False
-                pass
 
     def _create_sensors(self) -> t.Dict[SlamdeckSensorId, VL53L5CX]:
         return {

@@ -24,7 +24,7 @@ from slamdeck_python.transport import Transport
 
 from tab import Tab
 from visualizer_3d import Visualizer3d
-from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, VL53L5CX,
+from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, SlamdeckSettings, VL53L5CX,
 VL53L5CX_PowerMode, VL53L5CX_RangingMode, VL53L5CX_Resolution, 
 VL53L5CX_Status, VL53L5CX_TargetOrder)
 from slamdeck_python.cpx import BackendCPX
@@ -134,7 +134,7 @@ class SlamdeckTab(Tab, slamdeck_class):
     _s_disconnected = pyqtSignal()
     _s_connection_error = pyqtSignal(str)
     _s_on_new_data = pyqtSignal()
-    _s_update_sensor_config_ui = pyqtSignal(VL53L5CX)
+    _s_update_sensor_settings_ui = pyqtSignal()
 
     PACKET_SIZE = 640
     UPDATE_FREQUENCY = 30
@@ -155,7 +155,6 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.btnStopStreaming.clicked.connect(self._stop_streaming)
 
         self.findChild(QPushButton, 'btnSetSensor').clicked.connect(self._set)
-        self.findChild(QPushButton, 'btnUpdateConfig').clicked.connect(self._get_sensor_config)
 
         # Attach PyQt signals to callback functions
         self._s_on_new_data.connect(self._cb_on_new_data)
@@ -164,7 +163,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self._s_disconnected.connect(self._cb_disconnected)
         self._s_connection_error.connect(self._cb_connection_error)
 
-        self._s_update_sensor_config_ui.connect(self._cb_update_sensor_config_ui)
+        self._s_update_sensor_settings_ui.connect(self._cb_update_sensor_settings_ui)
 
         # Get references to children
         self.debugRaw = self.findChild(QPlainTextEdit, 'debugRaw')
@@ -178,6 +177,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.editSharpener: QLineEdit = self.findChild(QLineEdit, 'editSharpener')
         self.comboTargerOrder: QComboBox = self.findChild(QComboBox, 'comboTargerOrder')
         self.comboRangingMode: QComboBox = self.findChild(QComboBox, 'comboRangingMode')
+
 
         self.mainTabs: QTabWidget = self.findChild(QTabWidget, 'mainTabs')
         #self.mainTabs.addTab(self.visualizer_3d, 'Visualizer 3D')
@@ -216,11 +216,6 @@ class SlamdeckTab(Tab, slamdeck_class):
 
         self._update_button_states(connected=False)
 
-        config_sensor = self._current_sensor()
-        if config_sensor == SlamdeckSensorId.ALL:
-            config_sensor = self.slamdeck.SENORS[0]
-        self._cb_update_sensor_config_ui(self.slamdeck.get_sensor(config_sensor))
-
         # Create 3d visualizer, which must be done after slamdeck instantiation
         self.visualizer_3d = Visualizer3d(self.slamdeck)
         lay = QVBoxLayout(self.graphics3dVisualizer)
@@ -231,17 +226,15 @@ class SlamdeckTab(Tab, slamdeck_class):
         self._graph_timer.timeout.connect(self._update_ui)
         self._graph_timer.start()
 
+        self.comboSensor.currentTextChanged.connect(self._sensor_changed)
+        self._s_update_sensor_settings_ui.emit()
+
+    def _sensor_changed(self) -> None:
+        self.sensor_single.set_sensor(self._current_sensor())
+
     def _current_sensor(self) -> SlamdeckSensorId:
-        try:
-            sensor_tab = self._get_active_sensor_tab()
-            if sensor_tab == 'tabSingleSensor':
-                sensor = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
-            elif sensor_tab == 'tabAllSensor':
-                sensor = SlamdeckSensorId.ALL
-            return sensor
-        except Exception as e:
-            logging.error(f'Error getting current sensor: {e}')
-            return None
+        sensor_id = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
+        return self.slamdeck.get_sensor(sensor_id)
 
     def _get_ip(self) -> str:
         return self.editIp.text()
@@ -253,11 +246,8 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.editIp.setText(self.DEFAULT_IP)
         self.editPort.setText(self.DEFAULT_PORT)
 
-    def _get_sensor_config(self) -> None:
-        config_sensor = self._current_sensor()
-        pass
-
-    def _cb_update_sensor_config_ui(self, sensor: VL53L5CX) -> None:
+    def _cb_update_sensor_settings_ui(self) -> None:
+        sensor = self._current_sensor()
         self.editRangingFrequency.setText(str(sensor.ranging_frequency_hz))
         self.editIntegrationTime.setText(str(sensor.integration_time_ms))
         self.editSharpener.setText(str(sensor.sharpener_percent))
@@ -267,26 +257,16 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.comboRangingMode.setCurrentText(sensor.ranging_mode.name)
 
     def _set(self) -> None:
-        sensor = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
-        power_mode = VL53L5CX_PowerMode(self._string_to_power_mode[self.comboPowerMode.currentText()])
-        resolution = VL53L5CX_Resolution(self._string_to_resolution[self.comboResolution.currentText()])
-        target_order = self._string_to_target_order[self.comboTargerOrder.currentText()]
-        ranging_mode = self._string_to_ranging_mode[self.comboRangingMode.currentText()]
-        ranging_frequency = int(self.editRangingFrequency.text())
-        integration_time = int(self.editIntegrationTime.text())
-        sharpener = int(self.editSharpener.text())
-        """
-        print(
-            f'sensor_id: {sensor}\n'
-            f'power_mode: {power_mode}\n'
-            f'resolution: {resolution}\n'
-            f'target_order: {target_order}\n'
-            f'ranging_mode: {ranging_mode}\n'
-            f'ranging_frequency: {ranging_frequency}\n'
-            f'integration_time: {integration_time}\n'
-            f'sharpener: {sharpener}\n'
+        settings = SlamdeckSettings(
+            int(self.editIntegrationTime.text()),
+            int(self.editSharpener.text()),
+            int(self.editRangingFrequency.text()),
+            VL53L5CX_Resolution(self._string_to_resolution[self.comboResolution.currentText()]),
+            VL53L5CX_PowerMode(self._string_to_power_mode[self.comboPowerMode.currentText()]),
+            VL53L5CX_TargetOrder(self._string_to_target_order[self.comboTargerOrder.currentText()]),
+            VL53L5CX_RangingMode(self._string_to_ranging_mode[self.comboRangingMode.currentText()])
         )
-        """
+        self.slamdeck.set_settings(settings)
 
     def _populate_comboboxes(self) -> None:
         self.comboSensor.addItems(self._string_to_sensor.keys())
@@ -305,7 +285,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.slamdeck.stop_streaming()
 
     def _test(self) -> None:
-        sensor = self._current_sensor(self._current_sensor())
+        sensor = self._current_sensor()
         pass
 
     def _connect(self) -> None:
@@ -336,6 +316,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         logger.debug('Connected')
         self.statusText.setText('Connected')
         self._update_button_states(True)
+        self._s_update_sensor_settings_ui.emit()
 
     def _cb_disconnected(self) -> None:
         logger.debug('Disconnected')

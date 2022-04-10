@@ -3,21 +3,14 @@
 #include "vl53l5cx.h"
 
 typedef struct {
-    slamdeck_command_e command;
-    uint8_t sensor;
-    uint8_t data;
+    uint8_t command;
+    uint8_t data[sizeof(VL53L5CX_settings_t)];
 } slamdeck_packet_rx_t;
 
 typedef struct {
-    uint8_t data;     // *5 is for all sensors.
     uint16_t size;
-    slamdeck_result_e result;
+    uint8_t data[VL53L5CX_RESULT_MAX_BUF_SIZE * 5 + 5]; // (Data + status) * 5
 } slamdeck_packet_tx_t;
-
-typedef struct {
-    uint8_t  command;
-    uint8_t* [VL53L5CX_RESULT_MAX_BUF_SIZE * 5];
-} __attribute__((packed)) slamdeck_packet_packed_t;
 
 typedef enum {
     SLAMDECK_API_STATE_IDLE,

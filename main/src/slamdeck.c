@@ -81,7 +81,8 @@ static uint16_t get_data_size(const VL53L5CX_settings_t* settings)
 
 static VL53L5CX_status_e set_single_sensor_settings(VL53L5CX_t* sensor, const VL53L5CX_settings_t* settings)
 {
-    if (sensor->status == VL53L5CX_STATUS_NOT_ENABLED)
+    ESP_LOGD(TAG, "Sensor status: %d", sensor->status);
+    if (sensor->status != VL53L5CX_STATUS_OK)
         return sensor->status;
 
     uint8_t require_restart = sensor->is_ranging;
@@ -141,14 +142,14 @@ static void copy_settings(VL53L5CX_settings_t* dst, const VL53L5CX_settings_t* s
 void slamdeck_set_sensor_settings(const VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
 {
     copy_settings(&sensor_settings, settings);
-    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id < SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
         status[sensor_id] = set_single_sensor_settings(&sensors[sensor_id], &sensor_settings);
     }
 }
 
 void slamdeck_get_sensor_settings(VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
 {
-    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id < SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
         status[sensor_id] = sensors[sensor_id].status;
     }
     memcpy(settings, &sensor_settings, sizeof(VL53L5CX_settings_t));
@@ -157,7 +158,7 @@ void slamdeck_get_sensor_settings(VL53L5CX_settings_t* settings, VL53L5CX_status
 uint16_t slamdeck_get_sensor_data(uint8_t* buf, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
 {
     uint16_t data_size = get_data_size(&sensor_settings);
-    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id <= SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
+    for (slamdeck_sensor_id_e sensor_id = 0; sensor_id < SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
         status[sensor_id] = get_single_sensor_data(&sensors[sensor_id], buf, data_size);
     }
 

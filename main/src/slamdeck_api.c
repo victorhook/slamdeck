@@ -16,6 +16,8 @@ static const int START_UP_API_RX = BIT0;
 static const int START_UP_API_TX = BIT1;
 
 VL53L5CX_settings_t settings;
+VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS];
+
 
 xQueueHandle queueTx;
 
@@ -26,19 +28,19 @@ static const char* TAG = "SLAMDECK API";
 
 static slamdeck_result_e parse_slamdeck_packet(const esp_routable_packet_t* rx_esp, slamdeck_packet_rx_t* rx)
 {
-    static slamdeck_packet_packed_t rx_packed;
-    slamdeck_result_e result = SLAMDECK_RESULT_OK;
-    memcpy(&rx_packed, rx_esp->data, rx_esp->dataLength);
-    rx->command = rx_packed.command;
-    rx->data = rx_packed.data;
-    ESP_LOGI(TAG, "Cmd: %d, sensor: %d, data: %d", rx->command, rx->sensor, rx->data);
+    rx->command = rx_esp->data[0];
+    uint16_t data_size = rx_esp->dataLength - 1;
+    if (data_size > 0) {
+        memcpy(rx->data, &rx_esp->data[1], data_size);
+    }
+    ESP_LOGD(TAG, "Cmd: %d, data length: %d", rx->command, data_size);
 
     if ((rx->command < 0) || (rx->command >= SLAMDECK_API_TOTAL_COMMANDS)) {
-        ESP_LOGW(TAG, "Invalid command!");
-        result = SLAMDECK_RESULT_COMMAND_INVALD;
+        ESP_LOGW(TAG, "Invalid command: %d", rx->command);
+        return SLAMDECK_RESULT_COMMAND_INVALD;
     }
 
-    return result;
+    return SLAMDECK_RESULT_OK;
 }
 
 static void fill_tx_error(slamdeck_packet_tx_t* tx, uint8_t error)
@@ -50,8 +52,7 @@ static void fill_tx_error(slamdeck_packet_tx_t* tx, uint8_t error)
 
 static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
 {
-    static VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS];
-    uitn8_t do_send_response = 1;
+    uint8_t send_response = 1;
 
     switch (rx->command) {
         case SLAMDECK_COMMAND_GET_DATA: {
@@ -59,15 +60,15 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
             break;
         }
         case SLAMDECK_COMMAND_GET_SETTINGS: {
+            ESP_LOGD(TAG, "Getting settings");
             slamdeck_get_sensor_settings(&settings, status);
             memcpy(tx->data, status, sizeof(status));
             memcpy(&tx->data[sizeof(status)], &settings, sizeof(VL53L5CX_settings_t));
             tx->size = sizeof(status) + sizeof(VL53L5CX_settings_t);
-            ESP_LOGD(TAG, "GET SETTINGS SIZE: %d", tx->size);
-            ESP_LOGD(TAG, "Size: %d", tx->size);
             break;
         }
         case SLAMDECK_COMMAND_SET_SETTINGS: {
+            ESP_LOGD(TAG, "Setting settings");
             memcpy(&settings, rx->data, sizeof(VL53L5CX_settings_t));
             slamdeck_set_sensor_settings(&settings, status);
             memcpy(tx->data, status, sizeof(status));
@@ -75,20 +76,22 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
             break;
         }
         case SLAMDECK_COMMAND_START_STREAMING: {
+            ESP_LOGD(TAG, "Start streaming");
             slamdeck_state = SLAMDECK_STATE_STREAMING;
-            do_send_response = 0;
+            send_response = 0;
             break;
         }
         case SLAMDECK_COMMAND_STOP_STREAMING: {
+            ESP_LOGD(TAG, "Stop streaming");
             slamdeck_state = SLAMDECK_STATE_IDLE;
-            do_send_response = 0;
+            send_response = 0;
             break;
         }
         default:
             break;
     }
 
-    return do_send_response;
+    return send_response;
 }
 
 static void send_to_cpx(const slamdeck_packet_tx_t* tx)
@@ -133,10 +136,10 @@ static void slamdeck_api_task_rx()
     static esp_routable_packet_t rx_esp;
     static slamdeck_packet_rx_t rx;
     static slamdeck_packet_tx_t tx;
-    static uint8_t send_response = 1;
 
     while (1) {
         com_receive_app_blocking(&rx_esp);
+        uint8_t send_response = 1;
 
         slamdeck_result_e result = parse_slamdeck_packet(&rx_esp, &rx);
 
