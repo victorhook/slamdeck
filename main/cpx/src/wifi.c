@@ -292,25 +292,17 @@ uint8_t wifi_wait_for_socket_connected() {
 
 void wifi_wait_for_disconnect() {
 	xEventGroupWaitBits(s_wifi_event_group, WIFI_SOCKET_DISCONNECTED, pdTRUE, pdFALSE, portMAX_DELAY);
-	// Must close sockets properly.
+
+  // Reset rx and tx queues.
+  xQueueReset(wifiRxQueue);
+  xQueueReset(wifiTxQueue);
+
+  // Must close sockets properly.
 	shutdown(conn, 0);
 	close(conn);
 
-	slamdeck_api_stop_streaming();
-
-	/*
 	// Notify app that we're disconnected
-	static esp_routable_packet_t packet = {
-		.route={
-			.destination=CPX_T_ESP32,
-			.source=CPX_T_ESP32,
-			.function=CPX_F_APP
-		},
-		.dataLength=1,
-		.data={SLAMDECK_COMMAND_STOP_STREAMING}
-	};
-    espAppSendToRouterBlocking(&packet);
-	*/
+	slamdeck_api_stop_streaming();
 }
 
 static void wifi_task(void *pvParameters) {
@@ -335,8 +327,23 @@ static void wifi_task(void *pvParameters) {
   while (1) {
     wifi_wait_for_socket_connected();
     ESP_LOGI(TAG, "Client connected");
+
+    // Notify that we're connected
+    cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_WIFI_CTRL, &txp.route);
+    txp.data[0] = WIFI_CTRL_STATUS_CLIENT_CONNECTED;
+    txp.data[1] = 1;    // connected
+    txp.dataLength = 2;
+    espAppSendToRouterBlocking(&txp);
+
     wifi_wait_for_disconnect();
     ESP_LOGI(TAG, "Client disconnected");
+
+    // Notify that we're disconnected
+    cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_WIFI_CTRL, &txp.route);
+    txp.data[0] = WIFI_CTRL_STATUS_CLIENT_CONNECTED;
+    txp.data[1] = 0;    // disconnected
+    txp.dataLength = 2;
+    espAppSendToRouterBlocking(&txp);
   }
 }
 
@@ -349,6 +356,8 @@ void wifi_send_packet(const char * buffer, size_t size) {
       conn = -1;
       xEventGroupSetBits(s_wifi_event_group, WIFI_SOCKET_DISCONNECTED);
     }
+  } else {
+    ESP_LOGD(TAG, "Connection is -1");
   }
 }
 

@@ -37,12 +37,12 @@
 #define SLAMDECK_I2C_MASTER_FREQ_HZ 1000000
 #define SLAMDECK_I2C_ADDRESS_CF      0x99
 
+#define SLAMDECK_NBR_OF_SENSORS 5
+
 #define get_current_time() ((xTaskGetTickCount() / portTICK_PERIOD_MS) * 100)
 
-#define SLAMDECK_SENSOR_HANDLING_CORE 1
-#define SLAMDECK_NOT_SENSOR_HANDLING_CORE 0
 
-#define SLAMDECK_NBR_OF_SENSORS 5
+/* --- Typedefs --- */
 
 typedef enum {
     SLAMDECK_SENSOR_ID_MAIN    = 0,
@@ -55,11 +55,11 @@ typedef enum {
 } slamdeck_sensor_id_e;
 
 typedef enum {
-    SLAMDECK_COMMAND_GET_DATA            = 0,
-    SLAMDECK_COMMAND_GET_SETTINGS        = 1,
-    SLAMDECK_COMMAND_SET_SETTINGS        = 2,
-    SLAMDECK_COMMAND_START_STREAMING     = 3,
-    SLAMDECK_COMMAND_STOP_STREAMING      = 4,
+    SLAMDECK_COMMAND_GET_DATA        = 0,
+    SLAMDECK_COMMAND_GET_SETTINGS    = 1,
+    SLAMDECK_COMMAND_SET_SETTINGS    = 2,
+    SLAMDECK_COMMAND_START_STREAMING = 3,
+    SLAMDECK_COMMAND_STOP_STREAMING  = 4
 } slamdeck_command_e;
 
 typedef enum {
@@ -74,11 +74,6 @@ typedef enum {
     SLAMDECK_STATE_SLEEP     = 2
 } slamdeck_state_e;
 
-typedef struct {
-    slamdeck_sensor_id_e sensor;
-    slamdeck_command_e   command;
-    uint8_t              data;
-} set_request_t;
 
 //#define DISABLED_WIFI_API
 

@@ -168,7 +168,7 @@ uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor)
 {
     sensor->status = vl53l5cx_get_ranging_data(&sensor->config, &sensor->result);
     #ifdef DO_DEBUG
-        if (sensor->status)
+        if (sensor->status != VL53L5CX_STATUS_OK)
             ESP_LOGD(TAG, "I2C error getting data: %02x", sensor->status);
     #endif
     if (sensor->status == VL53L5CX_STATUS_OK) {
@@ -179,6 +179,7 @@ uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor)
         for (int grid = 0; grid < sensor->settings.resolution; grid++) {
             switch (sensor->result.target_status[grid]) {
                 case TARGET_STATUS_TARGET_NOT_DETECTED:
+                case TARGET_STATUS_RANGE_VALID_BUT_NO_TARGET:
                     sensor->data_distance_mm[grid] = VL53L5CX_MAX_DISTANCE_MM;
                     break;
                 case TARGET_STATUS_NOT_UPDATED:

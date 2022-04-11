@@ -15,10 +15,6 @@ EventGroupHandle_t startUpEventGroup;
 static const int START_UP_API_RX = BIT0;
 static const int START_UP_API_TX = BIT1;
 
-VL53L5CX_settings_t settings;
-VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS];
-
-
 xQueueHandle queueTx;
 
 static slamdeck_state_e slamdeck_state;
@@ -52,11 +48,13 @@ static void fill_tx_error(slamdeck_packet_tx_t* tx, uint8_t error)
 
 static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t* tx)
 {
+    static VL53L5CX_settings_t settings;
+    static VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS];
     uint8_t send_response = 1;
 
     switch (rx->command) {
         case SLAMDECK_COMMAND_GET_DATA: {
-            tx->size = slamdeck_get_sensor_data(&tx->data[sizeof(status)], status);
+            tx->size = slamdeck_get_sensor_data(tx->data, status);
             break;
         }
         case SLAMDECK_COMMAND_GET_SETTINGS: {
@@ -88,6 +86,7 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
             break;
         }
         default:
+            ESP_LOGW(TAG, "Unknown command: %d", rx->command);
             break;
     }
 

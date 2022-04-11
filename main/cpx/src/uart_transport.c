@@ -92,6 +92,8 @@ static EventGroupHandle_t startUpEventGroup;
 #define START_UP_RX_RUNNING (1<<0)
 #define START_UP_TX_RUNNING (1<<1)
 
+static const char* TAG = "UART";
+
 static uint8_t calcCrc(const uart_transport_packet_t* packet) {
   const uint8_t* start = (const uint8_t*) packet;
   const uint8_t* end = &packet->payload[packet->payloadLength];
@@ -121,14 +123,14 @@ static void uart_tx_task(void* _param) {
     // If we have nothing to send then wait, either for something to be
     // queued or for a request to send CTR
     if (uxQueueMessagesWaiting(tx_queue) == 0) {
-      ESP_LOGD("UART", "Waiting for CTR/TXQ");
+      ESP_LOGD(TAG, "Waiting for CTR/TXQ");
       evBits = xEventGroupWaitBits(evGroup,
                                 CTR_EVENT | TXQ_EVENT,
                                 pdTRUE, // Clear bits before returning
                                 pdFALSE, // Wait for any bit
                                 portMAX_DELAY);
       if ((evBits & CTR_EVENT) == CTR_EVENT) {
-        ESP_LOGD("UART", "Sent CTR");
+        ESP_LOGD(TAG, "Sent CTR");
         uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
       }
     }
@@ -143,23 +145,22 @@ static void uart_tx_task(void* _param) {
       txp.payload[txp.payloadLength] = calcCrc(&txp);
 
       do {
-        ESP_LOGD("UART", "Waiting for CTR/CTS");
+        ESP_LOGD(TAG, "Waiting for CTR/CTS");
         evBits = xEventGroupWaitBits(evGroup,
                                 CTR_EVENT | CTS_EVENT,
                                 pdTRUE, // Clear bits before returning
                                 pdFALSE, // Wait for any bit
                                 portMAX_DELAY);
         if ((evBits & CTR_EVENT) == CTR_EVENT) {
-          ESP_LOGD("UART", "Sent CTR");
+          ESP_LOGD(TAG, "Sent CTR");
           uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
         }
       } while ((evBits & CTS_EVENT) != CTS_EVENT);
-      ESP_LOGD("UART", "Sending packet");
+      ESP_LOGD(TAG, "Sending packet");
       uart_write_bytes(SLAMDECK_UART_CF, &txp, txp.payloadLength + UART_META_LENGTH);
     }
   }
 }
-
 
 static void uart_rx_task(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_RX_RUNNING);
@@ -172,13 +173,14 @@ static void uart_rx_task(void* _param) {
     uart_read_bytes(SLAMDECK_UART_CF, &rxp.payloadLength, 1, portMAX_DELAY);
 
     if (rxp.payloadLength == 0) {
-      ESP_LOGD("UART", "Received CTS");
+      ESP_LOGD(TAG, "Received CTS");
       xEventGroupSetBits(evGroup, CTS_EVENT);
     } else {
       uart_read_bytes(SLAMDECK_UART_CF, rxp.payload, rxp.payloadLength + UART_CRC_LENGTH, portMAX_DELAY);
+      ESP_LOGD(TAG, "Read %d bytes", rxp.payloadLength + UART_CRC_LENGTH);
       assert (rxp.payload[rxp.payloadLength] == calcCrc(&rxp));
 
-      ESP_LOGD("UART", "Received packet");
+      ESP_LOGD(TAG, "Received packet");
       // Post on RX queue and send flow control
       // Optimize a bit here
       if (uxQueueSpacesAvailable(rx_queue) > 0) {
@@ -216,7 +218,7 @@ void uart_transport_init() {
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_RX_RUNNING | START_UP_TX_RUNNING);
     xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 3, NULL);
-    ESP_LOGI("UART", "Waiting for RX task to start");
+    ESP_LOGI(TAG, "Waiting for RX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_RX_RUNNING,
                         pdTRUE, // Clear bits before returning
@@ -229,14 +231,14 @@ void uart_transport_init() {
     // too early and we cannot sync)
 
     xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 3, NULL);
-    ESP_LOGI("UART", "Waiting for TX task to start");
+    ESP_LOGI(TAG, "Waiting for TX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_TX_RUNNING,
                         pdTRUE, // Clear bits before returning
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    ESP_LOGI("UART", "Transport initialized");
+    ESP_LOGI(TAG, "Transport initialized");
 
 }
 

@@ -68,8 +68,8 @@ static void com_rx(void* _param) {
 
   while (1) {
     espAppReceiveFromRouter(&rxp);
-    ESP_LOGD(TAG, "Received packet for 0x%02X", rxp.route.destination);
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp, 10, ESP_LOG_DEBUG);
+    //ESP_LOGD(TAG, "Received packet for 0x%02X", rxp.route.destination);
+    //ESP_LOG_BUFFER_HEX_LEVEL(TAG, &rxp, 10, ESP_LOG_DEBUG);
 
     switch (rxp.route.function) {
       case CPX_F_TEST:

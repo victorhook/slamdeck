@@ -16,11 +16,11 @@
 
 
 static VL53L5CX_t sensors[] = {
-    {.id=SLAMDECK_SENSOR_ID_MAIN,  .status=VL53L5CX_STATUS_OK,          .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
-    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
-    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
-    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
-    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
+    {.id=SLAMDECK_SENSOR_ID_MAIN,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
+    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
+    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
+    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
+    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
 };
 
 static const VL53L5CX_settings_t sensor_settings_default = {
@@ -76,7 +76,7 @@ static void print_sensor_data(const VL53L5CX_t* sensor)
 
 static uint16_t get_data_size(const VL53L5CX_settings_t* settings)
 {
-    return settings->resolution * 2;
+    return settings->resolution * 2 * VL53L5CX_NB_TARGET_PER_ZONE;
 }
 
 static VL53L5CX_status_e set_single_sensor_settings(VL53L5CX_t* sensor, const VL53L5CX_settings_t* settings)
@@ -123,25 +123,13 @@ static VL53L5CX_status_e get_single_sensor_data(VL53L5CX_t* sensor, uint8_t* buf
     if (sensor->status == VL53L5CX_STATUS_NOT_ENABLED)
         return sensor->status;
     memcpy(buf, sensor->data_distance_mm, data_size);
-    ((uint16_t*) buf)[0] = 11;
     return sensor->status;
-}
-
-static void copy_settings(VL53L5CX_settings_t* dst, const VL53L5CX_settings_t* src)
-{
-    dst->integration_time_ms = src->integration_time_ms;
-    dst->sharpener_percent = src->sharpener_percent;
-    dst->ranging_frequency_hz = src->ranging_frequency_hz;
-    dst->resolution = src->resolution;
-    dst->power_mode = src->power_mode;
-    dst->target_order = src->target_order;
-    dst->ranging_mode = src->ranging_mode;
 }
 
 /* --- Public --- */
 void slamdeck_set_sensor_settings(const VL53L5CX_settings_t* settings, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
 {
-    copy_settings(&sensor_settings, settings);
+    memcpy(&sensor_settings, settings, sizeof(VL53L5CX_settings_t));
     for (slamdeck_sensor_id_e sensor_id = 0; sensor_id < SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
         status[sensor_id] = set_single_sensor_settings(&sensors[sensor_id], &sensor_settings);
     }
@@ -158,8 +146,11 @@ void slamdeck_get_sensor_settings(VL53L5CX_settings_t* settings, VL53L5CX_status
 uint16_t slamdeck_get_sensor_data(uint8_t* buf, VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS])
 {
     uint16_t data_size = get_data_size(&sensor_settings);
+    //printf("%d\n", data_size);
+    uint16_t offset = 0;
     for (slamdeck_sensor_id_e sensor_id = 0; sensor_id < SLAMDECK_NBR_OF_SENSORS; sensor_id++) {
-        status[sensor_id] = get_single_sensor_data(&sensors[sensor_id], buf, data_size);
+        status[sensor_id] = get_single_sensor_data(&sensors[sensor_id], &buf[offset], data_size);
+        offset += data_size;
     }
 
     return data_size * SLAMDECK_NBR_OF_SENSORS;
@@ -225,6 +216,9 @@ static void slamdeck_task()
     }
     ESP_LOGD(TAG, "%d Sensors initialized", initialized_sensors);
 
+    // Set settings
+    VL53L5CX_status_e status[SLAMDECK_NBR_OF_SENSORS];
+    slamdeck_set_sensor_settings(&sensor_settings_default, status);
 
     // Start all initialized sensors
     int started_sensors = 0;
@@ -278,7 +272,10 @@ static void slamdeck_task()
                 sensor->samples = 0;
             }
             printf("\n");
+            //print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_BACK]);
         }
+
+
 
     }
 }
