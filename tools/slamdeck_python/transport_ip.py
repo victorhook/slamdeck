@@ -5,7 +5,7 @@ from numpy import byte
 
 from slamdeck_python.transport import Transport
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class TransportIp(Transport):
@@ -24,10 +24,11 @@ class TransportIp(Transport):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.settimeout(self._connect_timeout_seconds)
         try:
-            logger.debug('Trying to connect')
+            logger.debug(f'Trying to connect to {self._ip}:{self._port}')
             self._sock.connect(((self._ip, self._port)))
         except Exception as e:
             logger.error(f'Failed to connect to BackendIP: "{e}"')
+            self._sock = None
             return False
 
         logger.info(f'Connected to {self._ip} on port {self._port}')
@@ -39,10 +40,15 @@ class TransportIp(Transport):
             logger.error('Already disconnected from socket')
             return False
 
-        self._sock.shutdown(socket.SHUT_RDWR)
-        self._sock.close()
-        self._sock = None
-        return True
+        try:
+            self._sock.shutdown(socket.SHUT_RDWR)
+            self._sock.close()
+            return True
+        except OSError as e:
+            logger.error(str(e))
+            return False
+        finally:
+            self._sock = None
 
     def write(self, data: bytes) -> int:
         if self._sock is None:

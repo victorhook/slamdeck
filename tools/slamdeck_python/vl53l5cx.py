@@ -8,10 +8,10 @@ from time import time
 
 
 class VL53L5CX_Status(IntEnum):
-    OK			 = 1
-    TIMEOUT_ERROR = 2
-    NOT_ENABLED   = 2
-    INIT_FAIL     = 3
+    OK			         = 0
+    TIMEOUT_ERROR        = 1
+    NOT_ENABLED          = 2
+    INIT_FAIL            = 3
     MCU_ERROR			 = 66
     STATUS_INVALID_PARAM = 127
     STATUS_ERROR         = 255
@@ -39,7 +39,7 @@ class VL53L5CX:
         This class represents a single VL53L5CX sensor.
     """
     id:                   uint8
-    data:                 np.ndarray           = np.ones(128, dtype=uint16)
+    data:                 np.ndarray           = np.full(128, 1000, dtype=uint16)
     i2c_address:          uint8                = 0x00
     integration_time_ms:  uint32               = 0
     sharpener_percent:    uint8                = 0

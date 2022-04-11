@@ -3,6 +3,16 @@ from dataclasses import dataclass
 import typing as t
 
 
+@dataclass
+class CrazyflieModel:
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    roll_degrees: float = 0.0
+    pitch_degrees: float = 0.0
+    yaw_degrees: float = 0.0
+
+
 def time_function(func):
     from time import time
 
@@ -124,3 +134,15 @@ class CallbackHandler:
     def call(self, *args, **kwargs) -> None:
         for callback in self._callbacks:
             callback(*args, **kwargs)
+
+
+
+"""
+class TimerUpdatableObject:
+
+    def __init__(self):
+        self._graph_timer = QTimer()
+        self._graph_timer.setInterval(int(1000 / self.FPS))
+        self._graph_timer.timeout.connect(self._update_graphics)
+        self._graph_timer.start()
+"""
