@@ -82,8 +82,6 @@ static uart_transport_packet_t rxp;
 static EventGroupHandle_t evGroup;
 static EventGroupHandle_t startUpEventGroup;
 
-#define TXD_PIN (GPIO_NUM_1) // Nina 22 => 1
-#define RXD_PIN (GPIO_NUM_3) // Nina 23 => 3
 
 #define CTS_EVENT (1<<0)
 #define CTR_EVENT (1<<1)
@@ -168,7 +166,10 @@ static void uart_rx_task(void* _param) {
   while(1) {
     do {
       uart_read_bytes(SLAMDECK_UART_CF, &rxp.start, 1, portMAX_DELAY);
+      ESP_LOGD(TAG, "RX--------------------->: %d", rxp.start);
     } while (rxp.start != 0xFF);
+
+    ESP_LOGD(TAG, "Got 0xff");
 
     uart_read_bytes(SLAMDECK_UART_CF, &rxp.payloadLength, 1, portMAX_DELAY);
 
@@ -217,7 +218,7 @@ void uart_transport_init() {
     // Launching communication tasks
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_RX_RUNNING | START_UP_TX_RUNNING);
-    xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 3, NULL);
+    xTaskCreate(uart_rx_task, "UART RX transport", 5000, NULL, 2, NULL);
     ESP_LOGI(TAG, "Waiting for RX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_RX_RUNNING,
@@ -230,7 +231,7 @@ void uart_transport_init() {
     // CTR and miss CTS (which means that the STM32 will stop sending CTS
     // too early and we cannot sync)
 
-    xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 3, NULL);
+    xTaskCreate(uart_tx_task, "UART TX transport", 5000, NULL, 2, NULL);
     ESP_LOGI(TAG, "Waiting for TX task to start");
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_TX_RUNNING,

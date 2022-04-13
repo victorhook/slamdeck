@@ -11,6 +11,7 @@
 #include "vl53l5cx.h"
 #include "slamdeck.h"
 #include "slamdeck_api.h"
+#include "io.h"
 
 #include "com.h"
 #include "WIFI_SSID.h"
@@ -61,10 +62,10 @@ void app_main(void)
     //esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK API", ESP_LOG_DEBUG);
-    esp_log_level_set("WIFI", ESP_LOG_DEBUG);
+    //esp_log_level_set("WIFI", ESP_LOG_DEBUG);
     esp_log_level_set("COM", ESP_LOG_DEBUG);
-    //esp_log_level_set("UART", ESP_LOG_DEBUG);
-    //esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
+    esp_log_level_set("UART", ESP_LOG_DEBUG);
+    esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set("Platform", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
@@ -74,24 +75,22 @@ void app_main(void)
     ESP_LOGI(TAG, "Available esp_get_free_heap_size: %d", esp_get_free_heap_size());
     ESP_LOGI(TAG, "Available esp_get_free_internal_heap_size: %d", esp_get_free_internal_heap_size());
 
-
     led_init();
-    led_set_state(LED_BLUE, LED_STATE_BLINK_0_25_HZ);
+    io_init();
     i2c_init();
 
     // Initialize esp APP transport before "com"
     espTransportInit();
     #ifndef DISABLED_WIFI_API
-        uart_transport_init();
+        //uart_transport_init();
         com_init();
         wifi_init();
         router_init();
-        wifi_ctrl();
+        //wifi_ctrl();
     #endif
 
     slamdeck_init();
     slamdeck_api_init();
 
-    //led_set_state(LED_RED, LED_STATE_ON);
     led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
 }

@@ -53,7 +53,7 @@ static inline uint8_t time_to_toggle(const led_t* led, uint32_t time)
     if (led->state == LED_STATE_ON || led->state == LED_STATE_OFF)
         return 0;
     else
-        return (time - led->last_toggle) > led->state;
+        return ((time - led->last_toggle)/2) > led->state;
 }
 
 static void led_change_state(const slamdeck_led_e led, const slamdeck_led_state_e state, const uint32_t time)
@@ -96,7 +96,7 @@ void led_task()
             }
         }
 
-        vTaskDelay(MIN_DELAY / portTICK_PERIOD_MS);
+        vTaskDelay(25 / portTICK_PERIOD_MS);
     }
 }
 
@@ -104,7 +104,7 @@ void led_init()
 {
     startUpEventGroup = xEventGroupCreate();
     xEventGroupClearBits(startUpEventGroup, START_UP_LEDS);
-    xTaskCreate(led_task, "Led Task", 5000, NULL, 2, NULL);
+    xTaskCreate(led_task, "Led Task", 5000, NULL, 1, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_LEDS,

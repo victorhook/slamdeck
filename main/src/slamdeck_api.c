@@ -17,7 +17,7 @@ static const int START_UP_API_TX = BIT1;
 
 xQueueHandle queueTx;
 
-static slamdeck_state_e slamdeck_state;
+static slamdeck_state_e slamdeck_state = SLAMDECK_STATE_IDLE;
 
 static const char* TAG = "SLAMDECK API";
 
@@ -93,19 +93,50 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
     return send_response;
 }
 
+#include "driver/uart.h"
+static void init_uart()
+{
+    const uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        //.source_clk = UART_SCLK_APB,
+    };
+    // We won't use a buffer for sending data.
+    uart_driver_install(SLAMDECK_UART_CF, 0, 0, 0, NULL, 0);
+    uart_param_config(SLAMDECK_UART_CF, &uart_config);
+    uart_set_pin(SLAMDECK_UART_CF, SLAMDECK_UART_TX1, SLAMDECK_UART_RX1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
+
+#define CTS SLAMDECK_GPIO_CF_IO_3
+#define CTR SLAMDECK_GPIO_CF_IO_1
+
 static void send_to_cpx(const slamdeck_packet_tx_t* tx)
 {
+
+    while (gpio_get_level(CTS) == 0) {
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+
+    gpio_set_level(CTR, 0);
+    uart_write_bytes(SLAMDECK_UART_CF, tx->data, tx->size);
+    gpio_set_level(CTR, 1);
+    /*
     static esp_routable_packet_t tx_esp = {
         .route={
-            .destination=CPX_T_HOST,
+            //.destination=CPX_T_HOST,
+            .destination=CPX_T_STM32,
             .source=CPX_T_ESP32,
             .function=CPX_F_APP
         }
     };
-    ESP_LOGD(TAG, "Sending to cpx: %d bytes", tx->size);
     memcpy(tx_esp.data, (const void*) tx->data, tx->size);
     tx_esp.dataLength = tx->size;
     espAppSendToRouterBlocking(&tx_esp);
+    */
 }
 
 static void slamdeck_api_task_tx()
@@ -124,10 +155,16 @@ static void slamdeck_api_task_tx()
             send_to_cpx(&tx);
         }
 
+        if (slamdeck.gpio_cf_io_2 == 1) {
+            slamdeck_state = SLAMDECK_STATE_STREAMING;
+        } else {
+            slamdeck_state = SLAMDECK_STATE_IDLE;
+        }
+
         vTaskDelay(10 / portTICK_PERIOD_MS);
+        ESP_LOGD(TAG, "Pin: %d", slamdeck.gpio_cf_io_2);
     }
 }
-
 
 static void slamdeck_api_task_rx()
 {
@@ -160,12 +197,13 @@ void slamdeck_api_stop_streaming()
 
 void slamdeck_api_init()
 {
+    init_uart();
     startUpEventGroup = xEventGroupCreate();
     queueTx = xQueueCreate(1, sizeof(slamdeck_packet_tx_t));
     xEventGroupClearBits(startUpEventGroup, START_UP_API_RX | START_UP_API_TX);
 
-    xTaskCreate(slamdeck_api_task_tx, "API TX", 5000, NULL, 3, NULL);
-    xTaskCreate(slamdeck_api_task_rx, "API RX", 5000, NULL, 3, NULL);
+    xTaskCreate(slamdeck_api_task_tx, "API TX", 5000, NULL, 2, NULL);
+    xTaskCreate(slamdeck_api_task_rx, "API RX", 5000, NULL, 2, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_API_RX | START_UP_API_TX,

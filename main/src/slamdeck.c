@@ -9,18 +9,22 @@
 // CPX
 #include "com.h"
 
+#include "led.h"
 #include "i2c.h"
 #include "slamdeck.h"
 #include "slamdeck_api.h"
 #include "vl53l5cx.h"
 
+// Global variable
+slamdeck_t slamdeck;
+
 
 static VL53L5CX_t sensors[] = {
     {.id=SLAMDECK_SENSOR_ID_MAIN,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
-    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
-    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
-    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
-    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
+    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
+    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
+    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
+    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
 };
 
 static const VL53L5CX_settings_t sensor_settings_default = {
@@ -266,12 +270,12 @@ static void slamdeck_task()
                 if (sensor->status != VL53L5CX_STATUS_OK)
                     continue;
 
-                printf("%lld: %dC | ", sensor->samples / seconds, sensor->result.silicon_temp_degc);
+                //printf("%lld: %dC | ", sensor->samples / seconds, sensor->result.silicon_temp_degc);
                 //print_sensor(sensor);
                 //print_sensor_data(sensor);
                 sensor->samples = 0;
             }
-            printf("\n");
+            //printf("\n");
             //print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_BACK]);
         }
 
@@ -286,7 +290,7 @@ void slamdeck_init()
     startUpEventGroup = xEventGroupCreate();
 
     xEventGroupClearBits(startUpEventGroup, START_UP_SLAMDECK | START_UP_CHECK_DATA_READY);
-    xTaskCreate(slamdeck_task, "Slamdeck", 8000, NULL, 5, NULL);
+    xTaskCreate(slamdeck_task, "Slamdeck", 8000, NULL, 2, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_SLAMDECK,
@@ -294,7 +298,7 @@ void slamdeck_init()
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    xTaskCreate(slamdeck_task_check_data_ready, "Slamdeck DR", 5000, NULL, 4, NULL);
+    xTaskCreate(slamdeck_task_check_data_ready, "Slamdeck DR", 5000, NULL, 2, NULL);
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_CHECK_DATA_READY,
@@ -302,6 +306,7 @@ void slamdeck_init()
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
+    led_set_state(LED_GREEN, LED_STATE_BLINK_0_25_HZ);
     ESP_LOGI(TAG, "initialized");
 }
 

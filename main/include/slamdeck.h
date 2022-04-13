@@ -10,6 +10,9 @@
 #define SLAMDECK_GPIO_LED_GREEN     GPIO_NUM_4
 #define SLAMDECK_GPIO_ROM_BOOT_SRC  GPIO_NUM_46
 #define SLAMDECK_GPIO_BOOT_BUTTON   GPIO_NUM_0
+#define SLAMDECK_GPIO_CF_IO_1       SLAMDECK_GPIO_BOOT_BUTTON
+#define SLAMDECK_GPIO_CF_IO_2       GPIO_NUM_41
+#define SLAMDECK_GPIO_CF_IO_3       SLAMDECK_GPIO_ROM_BOOT_SRC
 #define SLAMDECK_GPIO_SENSOR_MAIN   GPIO_NUM_15   // Onboard main PCB
 #define SLAMDECK_GPIO_SENSOR_FRONT  GPIO_NUM_33   // Front
 #define SLAMDECK_GPIO_SENSOR_RIGHT  GPIO_NUM_11   // Right
@@ -73,6 +76,21 @@ typedef enum {
     SLAMDECK_STATE_STREAMING = 1,
     SLAMDECK_STATE_SLEEP     = 2
 } slamdeck_state_e;
+
+typedef enum {
+    GROUND_CONTRL_PROTOCOL_CPX,
+    GROUND_CONTRL_PROTOCOL_CRTP
+} ground_control_protocol_e;
+
+typedef struct {
+    slamdeck_state_e          state;
+    ground_control_protocol_e ground_control_protocol;
+    uint8_t                   gpio_cf_io_1;
+    uint8_t                   gpio_cf_io_2;
+    uint8_t                   gpio_cf_io_3;
+} slamdeck_t;
+
+extern slamdeck_t slamdeck;
 
 
 //#define DISABLED_WIFI_API

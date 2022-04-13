@@ -327,6 +327,7 @@ static void wifi_task(void *pvParameters) {
   while (1) {
     wifi_wait_for_socket_connected();
     ESP_LOGI(TAG, "Client connected");
+    led_set_state(LED_RED, LED_STATE_ON);
 
     // Notify that we're connected
     cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_WIFI_CTRL, &txp.route);
@@ -337,6 +338,7 @@ static void wifi_task(void *pvParameters) {
 
     wifi_wait_for_disconnect();
     ESP_LOGI(TAG, "Client disconnected");
+    led_set_state(LED_RED, LED_STATE_OFF);
 
     // Notify that we're disconnected
     cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_WIFI_CTRL, &txp.route);
@@ -450,9 +452,9 @@ void wifi_init() {
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK | START_UP_CTRL_TASK);
-  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 3, NULL);
-  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 3, NULL);
-  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 3, NULL);
+  xTaskCreate(wifi_task, "WiFi TASK", 5000, NULL, 2, NULL);
+  xTaskCreate(wifi_sending_task, "WiFi TX", 5000, NULL, 2, NULL);
+  xTaskCreate(wifi_receiving_task, "WiFi RX", 5000, NULL, 2, NULL);
   ESP_LOGI(TAG, "Waiting for main, RX and TX tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_MAIN_TASK | START_UP_RX_TASK | START_UP_TX_TASK,
@@ -460,7 +462,7 @@ void wifi_init() {
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);
 
-  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 3, NULL);
+  xTaskCreate(wifi_ctrl, "WiFi CTRL", 5000, NULL, 2, NULL);
   ESP_LOGI(TAG, "Waiting for CTRL task to start");
   xEventGroupWaitBits(startUpEventGroup,
                       START_UP_CTRL_TASK,

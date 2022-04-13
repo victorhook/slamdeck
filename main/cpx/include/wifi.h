@@ -29,6 +29,7 @@
 
 #include "cpx.h"
 
+
 #define WIFI_TRANSPORT_MTU 1022
 
 #if WIFI_TRANSPORT_MTU > CPX_MAX_PAYLOAD_SIZE
