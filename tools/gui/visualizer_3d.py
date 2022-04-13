@@ -73,7 +73,7 @@ class Visualizer3d(scene.SceneCanvas):
         self._view = self.central_widget.add_view()
         self._view.bgcolor = '#ffffff'
         self._view.camera = scene.TurntableCamera(
-            fov=80,
+            fov=45,
             elevation=45,
             azimuth=-80,
             distance=5.0,
@@ -136,10 +136,10 @@ class Visualizer3d(scene.SceneCanvas):
         self.t0 = time.time()
 
     def _get_color(self, distance: float) -> np.array:
-        return self.cmap(distance, alpha=distance/self.MAX_DISTANCE)
+        return self.cmap(distance, alpha=1)
 
     def _get_size(self, distance: float) -> float:
-        return distance / 100
+        return distance / 50
 
     def _get_coordinate(self, row: int, col: int, distance: int, rotation_matrix: np.ndarray) -> np.array:
         grid_pad = 1 / self.grid_size
@@ -178,7 +178,8 @@ class Visualizer3d(scene.SceneCanvas):
             pos=coordinates,
             parent=self._view.scene,
             face_color=colors,
-            symbol='s'
+            symbol='o',
+            spherical=True
         )
 
         self.point_cloud = point_cloud
@@ -209,7 +210,7 @@ class Visualizer3d(scene.SceneCanvas):
         # Update point cloud
         coordinates, colors, sizes = self._create_points()
         if len(coordinates) > 0:
-            self.point_cloud.set_data(pos=coordinates, face_color=colors, size=sizes)
+            self.point_cloud.set_data(pos=coordinates, face_color=colors, size=sizes, edge_color=(0, 0, 0, 0))
 
         # Update Crazyflie
         self._cf_pos[2] = 0.5

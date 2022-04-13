@@ -96,8 +96,9 @@ class Slamdeck:
         to handle the communication with the actual slamdeck.
     """
 
-    def __init__(self, backend: BackendCPX) -> None:
+    def __init__(self, backend: BackendCPX, parent_ui = None) -> None:
         self._backend = backend
+        self.parent_ui = parent_ui
         self._sensors = self._create_sensors()
 
         self.connecting_handler = CallbackHandler()
@@ -181,13 +182,14 @@ class Slamdeck:
         connect_thread.start()
         return slamdeck_thread
 
-    def cf_logging_callback(self, x: float, y: float, z: float, roll_degrees: float, pitch_degrees: float, yaw_degrees: float) -> None:
+    def cf_logging_callback(self, x: float, y: float, z: float, roll_degrees: float, pitch_degrees: float, yaw_degrees: float, vbat: float) -> None:
         self._cf.x = x
         self._cf.y = y
         self._cf.z = z
         self._cf.roll_degrees = roll_degrees
         self._cf.pitch_degrees = pitch_degrees
         self._cf.yaw_degrees = yaw_degrees
+        self.parent_ui.vbat = vbat
 
     # --- API methods --- #
     def _get_data(self) -> None:
@@ -197,7 +199,7 @@ class Slamdeck:
     def _read_data(self) -> None:
         response = self._backend.read()
         if response is not None:
-            print(f'Read {len(response)} bytes')
+            #print(f'Read {len(response)} bytes')
             self._parse_get_data(response)
             self.on_new_data_handler.call()
 
@@ -264,7 +266,7 @@ class Slamdeck:
 
         while self._is_running.is_set():
             action = self._action_queue.get()
-            print(action)
+            #print(action)
 
             if action == Action.DISCONNECT:
                self._disconnect()

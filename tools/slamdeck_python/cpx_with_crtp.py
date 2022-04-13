@@ -119,7 +119,7 @@ class BackendCPXWithCrtp2(BackendCPX):
 
 class BackendCPXWithCrtp(BackendCPX):
 
-    def __init__(self, ip: str, port: int):
+    def __init__(self, ip: str, port: int, cf: Crazyflie):
         self._backend: BackendCPX = None
         self._ip = ip
         self._port = port
@@ -134,8 +134,10 @@ class BackendCPXWithCrtp(BackendCPX):
         self._lg_stab.add_variable('stabilizer.roll', 'float')
         self._lg_stab.add_variable('stabilizer.pitch', 'float')
         self._lg_stab.add_variable('stabilizer.yaw', 'float')
+        self._lg_stab.add_variable('pm.vbat', 'FP16')
 
-        self._cf = Crazyflie(rw_cache='./cache')
+
+        self._cf = cf
         self._cf.connected.add_callback(self.connected)
         self._cf.disconnected.add_callback(self.disconnected)
 
@@ -205,6 +207,6 @@ class BackendCPXWithCrtp(BackendCPX):
             data['stateEstimate.z'],
             data['stabilizer.roll'],
             data['stabilizer.pitch'],
-            data['stabilizer.yaw']
+            data['stabilizer.yaw'],
+            data['pm.vbat']
         )
-        print(timestamp)

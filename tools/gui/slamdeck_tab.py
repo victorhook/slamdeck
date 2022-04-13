@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 import logging
-from threading import Thread, Event, currentThread
-import typing as t
 from enum import IntEnum
-import time
+import typing as t
 
 from PyQt5 import uic
 from PyQt5.QtCore import pyqtSignal, QPointF, QSizeF, QRectF, QObject, QTimer, QThread
@@ -11,25 +9,24 @@ from PyQt5.QtWidgets import (QMessageBox, QWidget, QGraphicsScene, QGraphicsView
                             QGraphicsTextItem, QGraphicsRectItem, QComboBox,
                             QLabel, QLineEdit, QPushButton, QPlainTextEdit,
                             QTabWidget, QOpenGLWidget, QFrame, QVBoxLayout)
-from PyQt5 import Qt
 from PyQt5.QtGui import QPen, QColor, qRgb, QTextBlock, QBrush, QImage
 from pathlib import Path
 
-from PIL import Image
-from PIL.ImageQt import ImageQt
-import numpy as np
-from  matplotlib.colors import LinearSegmentedColormap, rgb2hex
-from slamdeck_python.transport import Transport
+from matplotlib.colors import LinearSegmentedColormap, rgb2hex
+
+from cflib.crazyflie import Crazyflie
 
 
+# Gui imports
 from tab import Tab
 from visualizer_3d import Visualizer3d
-from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, SlamdeckSettings, VL53L5CX,
-VL53L5CX_PowerMode, VL53L5CX_RangingMode, VL53L5CX_Resolution, 
-VL53L5CX_Status, VL53L5CX_TargetOrder)
-from slamdeck_python.cpx import BackendCPX
+from flight_controller import FlightController
 from slamdeck_python.transport_ip import TransportIp
-from slamdeck_python.utils import Subscriber, subscriber, Callback
+from slamdeck_python.cpx import BackendCPX
+from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, SlamdeckSettings,
+                                      VL53L5CX, VL53L5CX_PowerMode, VL53L5CX_RangingMode,
+                                      VL53L5CX_Resolution, VL53L5CX_TargetOrder)
+from slamdeck_python.utils import Callback
 from slamdeck_python.cpx_with_crtp import BackendCPXWithCrtp
 
 
@@ -46,7 +43,7 @@ N = 2000
 cmap = LinearSegmentedColormap.from_list('r',["r", "w", "g"], N=N)
 
 
-class SensorUi(QObject, Subscriber):
+class SensorUi(QObject):
 
     _s_update_ui = pyqtSignal()
     _s_create_grids = pyqtSignal()
@@ -153,6 +150,8 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.setupUi(self)
         self.tabWidget = tabWidget
 
+        self._cf = Crazyflie(rw_cache='./cache')
+
         # Attach button callbacks
         self.btnConnect.clicked.connect(self._connect)
         self.btnDisconnect.clicked.connect(self._disconnect)
@@ -198,7 +197,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self._set_default_values()
 
         #self.slamdeck = Slamdeck(BackendCPX(TransportIp(self._get_ip(), self._get_port())))
-        self.slamdeck = Slamdeck(BackendCPXWithCrtp(self._get_ip(), self._get_port()))
+        self.slamdeck = Slamdeck(BackendCPXWithCrtp(self._get_ip(), self._get_port(), self._cf), self)
 
         # Attach callbacks for Slamdeck to trigger PyQt signals
         self.slamdeck.connecting_handler.add_callback(Callback(self._s_connecting.emit))
@@ -221,6 +220,9 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.visualizer_3d = Visualizer3d(self.slamdeck)
         lay = QVBoxLayout(self.graphics3dVisualizer)
         lay.addWidget(self.visualizer_3d.native)
+
+        self._fc = FlightController(self._cf, self.visualizer_3d)
+        self.vbat: float = 0.0
 
         self._graph_timer = QTimer()
         self._graph_timer.setInterval(int(1000 / self.UPDATE_FREQUENCY))
@@ -290,6 +292,7 @@ class SlamdeckTab(Tab, slamdeck_class):
 
     def _update_ui(self) -> None:
         self.labelSampleRate.setText(str(self.slamdeck.get_streaming_rate()))
+        self.labelBattery.setText(str(round(self.vbat, 3)))
 
     def _update_button_states(self, connected: bool) -> None:
         self.btnDisconnect.setEnabled(connected)
