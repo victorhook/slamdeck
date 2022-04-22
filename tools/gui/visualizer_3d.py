@@ -90,6 +90,7 @@ class Visualizer3d(scene.SceneCanvas):
         )
 
         plane_size = 10
+        """
         scene.visuals.Plane(
             width=plane_size,
             height=plane_size,
@@ -98,9 +99,9 @@ class Visualizer3d(scene.SceneCanvas):
             color=(0.5, 0.5, 0.5, 0.5),
             edge_color="gray",
             parent=self._view.scene)
-
+        """
         self._cf_lines = self._make_cf_lines(self._view.scene)
-        self._cf_arrow = self.make_cf_arrow(0.5, 0.02, 0.1, 0.1, self._view.scene)
+        #self._cf_arrow = self.make_cf_arrow(0.5, 0.02, 0.1, 0.1, self._view.scene)
 
         # Subscribe to models
         self.slamdeck = slamdeck
@@ -139,7 +140,7 @@ class Visualizer3d(scene.SceneCanvas):
         return self.cmap(distance, alpha=1)
 
     def _get_size(self, distance: float) -> float:
-        return distance / 50
+        return 10#distance / 50
 
     def _get_coordinate(self, row: int, col: int, distance: int, rotation_matrix: np.ndarray) -> np.array:
         grid_pad = 1 / self.grid_size
@@ -179,7 +180,7 @@ class Visualizer3d(scene.SceneCanvas):
             parent=self._view.scene,
             face_color=colors,
             symbol='o',
-            spherical=True
+            #spherical=True
         )
 
         self.point_cloud = point_cloud
@@ -213,10 +214,10 @@ class Visualizer3d(scene.SceneCanvas):
             self.point_cloud.set_data(pos=coordinates, face_color=colors, size=sizes, edge_color=(0, 0, 0, 0))
 
         # Update Crazyflie
-        self._cf_pos[2] = 0.5
+        self._cf_pos[2] = 0.01
         #self._cf_pos[0] = self._cf.x
         #self._cf_pos[1] = self._cf.y
-        self._cf_pos[2] = self._cf.z
+        #self._cf_pos[2] = self._cf.z
         x, y, z = self._create_cf_lines()
         self._cf_lines[0].set_data(x) # x axis
         self._cf_lines[1].set_data(y) # y axis
@@ -253,9 +254,10 @@ class Visualizer3d(scene.SceneCanvas):
 
     def _make_cf_lines(self, parent) -> np.ndarray:
         x, y, z = self._create_cf_lines()
-        x = scene.visuals.LinePlot(x, width=1, color='red', parent=parent, marker_size=0.0)
-        y = scene.visuals.LinePlot(y, width=1, color='green', parent=parent, marker_size=0.0)
-        z = scene.visuals.LinePlot(z, width=1, color='blue', parent=parent, marker_size=0.0)
+        print(y)
+        x = scene.visuals.LinePlot(x, width=0.3, color='red', parent=parent, marker_size=0.0)
+        y = scene.visuals.LinePlot(y, width=0.3, color='green', parent=parent, marker_size=0.0)
+        z = scene.visuals.LinePlot(z, width=0.3, color='blue', parent=parent, marker_size=0.0)
         return x, y, z
 
     def _create_cf_lines(self) -> np.ndarray:

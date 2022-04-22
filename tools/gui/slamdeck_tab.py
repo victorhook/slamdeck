@@ -25,7 +25,7 @@ from slamdeck_python.transport_ip import TransportIp
 from slamdeck_python.cpx import BackendCPX
 from slamdeck_python.slamdeck import (Slamdeck, SlamdeckSensorId, SlamdeckSettings,
                                       VL53L5CX, VL53L5CX_PowerMode, VL53L5CX_RangingMode,
-                                      VL53L5CX_Resolution, VL53L5CX_TargetOrder)
+                                      VL53L5CX_Resolution, VL53L5CX_TargetOrder, SlamdeckCommunicationMode)
 from slamdeck_python.utils import Callback
 from slamdeck_python.cpx_with_crtp import BackendCPXWithCrtp
 
@@ -96,6 +96,7 @@ class SensorUi(QObject):
                 value = distances[g]
                 color_value = self._constraint_value(value)
                 grid.rect.setBrush(self.colors[color_value])
+                #grid.text.setPlainText(str(color_value))
                 g += 1
 
     def _create_grids(self) -> t.List[t.List['Grid']]:
@@ -130,12 +131,13 @@ class SensorUi(QObject):
         text: QGraphicsTextItem
 
 
+
 class SlamdeckTab(Tab, slamdeck_class):
 
     _s_connecting = pyqtSignal()
     _s_connected = pyqtSignal()
     _s_disconnected = pyqtSignal()
-    _s_connection_error = pyqtSignal(str)
+    _s_connection_error = pyqtSignal()
     _s_on_new_data = pyqtSignal()
     _s_update_sensor_settings_ui = pyqtSignal()
 
@@ -144,6 +146,9 @@ class SlamdeckTab(Tab, slamdeck_class):
 
     DEFAULT_IP = '192.168.6.83'
     DEFAULT_PORT = '5000'
+    DEFAULT_NFR_ADDRESS = '0/80/2M/E7E7E7E7E7'
+
+    _communcation_modes = {mode.name: mode for mode in SlamdeckCommunicationMode}
 
     def __init__(self, tabWidget, helper, *args):
         super(SlamdeckTab, self).__init__(*args)
@@ -151,6 +156,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.tabWidget = tabWidget
 
         self._cf = Crazyflie(rw_cache='./cache')
+        self._communcation_mode: SlamdeckCommunicationMode = None
 
         # Attach button callbacks
         self.btnConnect.clicked.connect(self._connect)
@@ -180,12 +186,15 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.comboTargerOrder: QComboBox = self.findChild(QComboBox, 'comboTargerOrder')
         self.comboRangingMode: QComboBox = self.findChild(QComboBox, 'comboRangingMode')
 
-
         self.mainTabs: QTabWidget = self.findChild(QTabWidget, 'mainTabs')
         self.graphics2dVisualizer: QGraphicsView = self.findChild(QGraphicsView, 'tabSensorGraphics')
         self.graphics3dVisualizer: QFrame = self.findChild(QFrame, 'graphics3dVisualizer')
 
+        # Top bar
+        self.comboCommunication: QComboBox = self.findChild(QComboBox, 'comboCommunication')
         self.editPort = self.findChild(QLineEdit, 'editPort')
+        self.editIp = self.findChild(QLineEdit, 'editIp')
+        self.editRadioAddress = self.findChild(QLineEdit, 'editRadioAddress')
 
         self._string_to_sensor = {sensor.name: sensor.value for sensor in SlamdeckSensorId}
         self._string_to_power_mode = {mode.name: mode.value for mode in VL53L5CX_PowerMode}
@@ -230,10 +239,24 @@ class SlamdeckTab(Tab, slamdeck_class):
         self._graph_timer.start()
 
         self.comboSensor.currentTextChanged.connect(self._sensor_changed)
+        self.comboCommunication.currentTextChanged.connect(self._communcation_mode_changed)
+        self._communcation_mode_changed()
         self._s_update_sensor_settings_ui.emit()
 
     def _sensor_changed(self) -> None:
         self.sensor_single.set_sensor(self._current_sensor())
+
+    def _communcation_mode_changed(self) -> None:
+        self._communication_mode = self._communcation_modes[self.comboCommunication.currentText()]
+        self.editIp.setEnabled(False)
+        self.editPort.setEnabled(False)
+        self.editRadioAddress.setEnabled(False)
+        
+        if self._communication_mode == SlamdeckCommunicationMode.WIFI:
+            self.editIp.setEnabled(True)
+            self.editPort.setEnabled(True)
+        elif self._communication_mode == SlamdeckCommunicationMode.NRF:
+            self.editRadioAddress.setEnabled(True)
 
     def _current_sensor(self) -> SlamdeckSensorId:
         sensor_id = SlamdeckSensorId(self._string_to_sensor[self.comboSensor.currentText()])
@@ -245,9 +268,13 @@ class SlamdeckTab(Tab, slamdeck_class):
     def _get_port(self) -> int:
         return int(self.editPort.text())
 
+    def _get_nrf_address(self) -> str:
+        return self.editRadioAddress.text()
+
     def _set_default_values(self) -> None:
         self.editIp.setText(self.DEFAULT_IP)
         self.editPort.setText(self.DEFAULT_PORT)
+        self.editRadioAddress.setText(self.DEFAULT_NFR_ADDRESS)
 
     def _set_settings(self) -> None:
         settings = SlamdeckSettings(
@@ -262,11 +289,15 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.slamdeck.set_settings(settings)
 
     def _populate_comboboxes(self) -> None:
+        # Settings
         self.comboSensor.addItems(self._string_to_sensor.keys())
         self.comboPowerMode.addItems(self._string_to_power_mode.keys())
         self.comboResolution.addItems(self._string_to_resolution.keys())
         self.comboTargerOrder.addItems(self._string_to_target_order.keys())
         self.comboRangingMode.addItems(self._string_to_ranging_mode.keys())
+
+        # Communication modes
+        self.comboCommunication.addItems(self._communcation_modes.keys())
 
     def _start_streaming(self) -> None:
         self.slamdeck.start_streaming()
@@ -281,11 +312,16 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.i = 0
         self.t0 = 0
 
-        # TODO: Fix his private attribute access
+        self.slamdeck._communication_mode = self._communication_mode
+
+        # TODO: Fix his private attribute access and make generic?
         if not self.slamdeck.is_connected():
-            self.slamdeck._backend._transport._ip = self._get_ip()
-            self.slamdeck._backend._transport._port = self._get_port()
-            self.slamdeck.connect()
+            if self._communication_mode == SlamdeckCommunicationMode.WIFI:
+                self.slamdeck._backend._transport._ip = self._get_ip()
+                self.slamdeck._backend._transport._port = self._get_port()
+                self.slamdeck.connect()
+            elif self._communication_mode == SlamdeckCommunicationMode.NRF:
+                self.slamdeck.connect(self._get_nrf_address())
 
     def _disconnect(self) -> None:
         self.slamdeck.disconnect()

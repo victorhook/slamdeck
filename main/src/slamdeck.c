@@ -21,10 +21,10 @@ slamdeck_t slamdeck;
 
 static VL53L5CX_t sensors[] = {
     {.id=SLAMDECK_SENSOR_ID_MAIN,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_MAIN,  .i2c_address=0x30},  // SLAMDECK_SENSOR_ID_MAIN
-    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
-    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
-    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
-    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_NOT_ENABLED, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
+    {.id=SLAMDECK_SENSOR_ID_FRONT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_FRONT, .i2c_address=0x31},  // SLAMDECK_SENSOR_ID_FRONT
+    {.id=SLAMDECK_SENSOR_ID_RIGHT, .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_RIGHT, .i2c_address=0x32},  // SLAMDECK_SENSOR_ID_RIGHT
+    {.id=SLAMDECK_SENSOR_ID_BACK,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_BACK,  .i2c_address=0x33},  // SLAMDECK_SENSOR_ID_BACK
+    {.id=SLAMDECK_SENSOR_ID_LEFT,  .status=VL53L5CX_STATUS_OK, .enable_pin=SLAMDECK_GPIO_SENSOR_LEFT,  .i2c_address=0x34}   // SLAMDECK_SENSOR_ID_LEFT
 };
 
 static const VL53L5CX_settings_t sensor_settings_default = {
@@ -70,7 +70,8 @@ static void print_sensor_data(const VL53L5CX_t* sensor)
     int row_size = sensor->settings.resolution == VL53L5CX_RESOLUTION_4X4 ? 4 : 8;
     for (int row = row_size-1; row >= 0; row--) {
         for (int col = 0; col < row_size; col++) {
-            printf("| %3u  %4d ", sensor->result.target_status[grid], sensor->data_distance_mm[grid]);
+            //printf("| %3u  %4d ", sensor->result.target_status[grid], sensor->data_distance_mm[grid]);
+            printf(" %4d ", sensor->data_distance_mm[grid]);
             grid++;
         }
         printf("\n");
@@ -260,7 +261,7 @@ static void slamdeck_task()
 
         uint64_t now = esp_timer_get_time();
         uint64_t dt = (now - t0) / 1000;
-        uint8_t seconds = 3;
+        uint8_t seconds = 1;
 
         if (dt > 1000*seconds) {
             t0 = now;
@@ -276,7 +277,7 @@ static void slamdeck_task()
                 sensor->samples = 0;
             }
             //printf("\n");
-            //print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_BACK]);
+            //print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_MAIN]);
         }
 
 

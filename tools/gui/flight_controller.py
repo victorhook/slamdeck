@@ -53,7 +53,7 @@ class FlightController:
         self._sent = False
 
     def sendHoverCommand(self):
-        print(self._state, self._sent)
+        #print(self._state, self._sent)
         if self._state == FlyState.IDLE:
             self.cf.commander.send_stop_setpoint()
         elif self._state == FlyState.STARTUP:

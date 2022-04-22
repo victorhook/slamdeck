@@ -112,8 +112,8 @@ static void uart_tx_task(void* _param) {
   xEventGroupSetBits(startUpEventGroup, START_UP_TX_RUNNING);
 
   do {
-    uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
-    vTaskDelay(10);
+    uart_write_bytes(SLAMDECK_UART_CF, ctr, sizeof(ctr));
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     evBits = xEventGroupGetBits(evGroup);
   } while ((evBits & CTS_EVENT) != CTS_EVENT);
 
@@ -154,6 +154,7 @@ static void uart_tx_task(void* _param) {
           uart_write_bytes(SLAMDECK_UART_CF, &ctr, sizeof(ctr));
         }
       } while ((evBits & CTS_EVENT) != CTS_EVENT);
+
       ESP_LOGD(TAG, "Sending packet");
       uart_write_bytes(SLAMDECK_UART_CF, &txp, txp.payloadLength + UART_META_LENGTH);
     }
@@ -166,10 +167,7 @@ static void uart_rx_task(void* _param) {
   while(1) {
     do {
       uart_read_bytes(SLAMDECK_UART_CF, &rxp.start, 1, portMAX_DELAY);
-      ESP_LOGD(TAG, "RX--------------------->: %d", rxp.start);
     } while (rxp.start != 0xFF);
-
-    ESP_LOGD(TAG, "Got 0xff");
 
     uart_read_bytes(SLAMDECK_UART_CF, &rxp.payloadLength, 1, portMAX_DELAY);
 
@@ -181,7 +179,6 @@ static void uart_rx_task(void* _param) {
       ESP_LOGD(TAG, "Read %d bytes", rxp.payloadLength + UART_CRC_LENGTH);
       assert (rxp.payload[rxp.payloadLength] == calcCrc(&rxp));
 
-      ESP_LOGD(TAG, "Received packet");
       // Post on RX queue and send flow control
       // Optimize a bit here
       if (uxQueueSpacesAvailable(rx_queue) > 0) {

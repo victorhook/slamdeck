@@ -56,8 +56,42 @@
       </layout>
      </item>
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_5">
-       <item>
+      <layout class="QGridLayout" name="gridLayout">
+       <item row="1" column="2">
+        <widget class="QLabel" name="label_4">
+         <property name="text">
+          <string>Port:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="editIp">
+         <property name="maximumSize">
+          <size>
+           <width>200</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_5">
+         <property name="text">
+          <string>Radio address</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLineEdit" name="editRadioAddress">
+         <property name="maximumSize">
+          <size>
+           <width>200</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
         <widget class="QLabel" name="label_11">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
@@ -70,34 +104,41 @@
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QLineEdit" name="editIp">
-         <property name="maximumSize">
-          <size>
-           <width>200</width>
-           <height>16777215</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_4">
-         <property name="text">
-          <string>Port:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
+       <item row="1" column="6">
         <widget class="QLineEdit" name="editPort">
          <property name="maximumSize">
           <size>
-           <width>200</width>
+           <width>50</width>
            <height>16777215</height>
           </size>
          </property>
         </widget>
        </item>
-       <item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="comboCommunication"/>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>Communication</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="8">
+        <widget class="QLabel" name="label_2">
+         <property name="text">
+          <string>Battery:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="9">
+        <widget class="QLabel" name="labelBattery">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="8">
         <widget class="QLabel" name="label">
          <property name="enabled">
           <bool>true</bool>
@@ -122,40 +163,39 @@
          </property>
         </widget>
        </item>
-       <item>
+       <item row="0" column="9">
         <widget class="QLabel" name="statusText">
          <property name="text">
           <string/>
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QLabel" name="label_2">
-         <property name="text">
-          <string>Battery:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="labelBattery">
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item>
+       <item row="2" column="8">
         <widget class="QLabel" name="label_14">
          <property name="text">
           <string>Streaming sample rate:</string>
          </property>
         </widget>
        </item>
-       <item>
+       <item row="2" column="9">
         <widget class="QLabel" name="labelSampleRate">
          <property name="text">
           <string/>
          </property>
         </widget>
+       </item>
+       <item row="1" column="7">
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </item>

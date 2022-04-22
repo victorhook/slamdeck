@@ -64,8 +64,8 @@ void app_main(void)
     esp_log_level_set("SLAMDECK API", ESP_LOG_DEBUG);
     //esp_log_level_set("WIFI", ESP_LOG_DEBUG);
     esp_log_level_set("COM", ESP_LOG_DEBUG);
-    esp_log_level_set("UART", ESP_LOG_DEBUG);
-    esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
+    //esp_log_level_set("UART", ESP_LOG_DEBUG);
+    //esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set("Platform", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
@@ -82,7 +82,7 @@ void app_main(void)
     // Initialize esp APP transport before "com"
     espTransportInit();
     #ifndef DISABLED_WIFI_API
-        //uart_transport_init();
+        uart_transport_init();
         com_init();
         wifi_init();
         router_init();

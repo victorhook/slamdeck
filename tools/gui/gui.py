@@ -20,6 +20,9 @@ from PyQt5.QtWidgets import QMessageBox
 
 from pathlib import Path
 
+# Cflib
+import cflib.crtp  # noqa
+
 from slamdeck_tab import SlamdeckTab
 
 (main_window_class,
@@ -51,6 +54,8 @@ def main():
     to stdout and start the GUI.
     """
     app = None
+
+    cflib.crtp.init_drivers()
 
     # Connect ctrl-c (SIGINT) signal
     #signal.signal(signal.SIGINT, lambda sig, frame: handle_sigint(app))
