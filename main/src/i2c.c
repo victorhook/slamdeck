@@ -28,7 +28,7 @@ SemaphoreHandle_t semaphore_i2c_master;
 static uint8_t i2c_cmd_link_buf[I2C_CMD_LINK_BUFF_SIZE];
 
 
-#define DO_DEBUG
+//#define DO_DEBUG
 #ifdef DO_DEBUG
 #define check_err(res) printf("Result: %s\n", esp_err_to_name(res))
 #else
@@ -87,9 +87,9 @@ static inline esp_err_t i2c_write_reg16_to_device(i2c_cmd_handle_t cmd, const ui
 		(address << 1) | I2C_MASTER_WRITE,
 		(uint8_t) (reg >> 8),
 		reg & 0xff};
-	//#ifdef DO_DEBUG
-	//	ESP_LOGD(TAG, "i2c addr: %02x", (address << 1) | I2C_MASTER_WRITE);
-	//#endif
+	#ifdef DO_DEBUG
+		ESP_LOGD(TAG, "i2c addr: %02x", (address << 1) | I2C_MASTER_WRITE);
+	#endif
 	return i2c_master_write(cmd, data, 3, I2C_ACK_CHECK_EN);
 }
 
@@ -142,6 +142,7 @@ int i2c_master_ping_address(const uint8_t address)
     esp_err_t ret = i2c_master_cmd_begin(I2C_BUS, cmd, 10/portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
 	xSemaphoreGive(semaphore_i2c_master);
+	ESP_LOGI(TAG, "Ping: %d", ret);
     return ret;
 }
 
@@ -152,9 +153,9 @@ int i2c_is_initialized()
 
 int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
-	//#ifdef DO_DEBUG
-	//	printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
-	//#endif
+	#ifdef DO_DEBUG
+		printf("-- [%02x] Read %d bytes from register %04x --\n", address, size, reg);
+	#endif
 	uint16_t bytes_left = size;
 	uint16_t index = 0;
 	uint16_t chunk_size = 0;
@@ -184,9 +185,9 @@ int i2c_master_read_from_reg16(const uint8_t address, const uint16_t reg, uint8_
 
 int i2c_master_write_to_reg16(const uint8_t address, const uint16_t reg, uint8_t* buf, const uint32_t size)
 {
-	//#ifdef DO_DEBUG
-	//	printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
-    //#endif
+	#ifdef DO_DEBUG
+		printf("-- [%02x] Write %d bytes to register %04x --\n", address, size, reg);
+    #endif
 
 	uint16_t bytes_left = size;
 	uint16_t index = 0;

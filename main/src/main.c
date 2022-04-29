@@ -25,7 +25,7 @@
 
 static const char* TAG = "MAIN";
 
-static void wifi_ctrl()
+static void wifi_connect()
 {
     static esp_routable_packet_t packet = {
         .route={
@@ -58,12 +58,12 @@ void app_main(void)
 {
     esp_log_level_set("*", ESP_LOG_INFO);
     esp_log_level_set("VL53L5CX", ESP_LOG_DEBUG);
-    esp_log_level_set("I2C", ESP_LOG_DEBUG);
+    //esp_log_level_set("I2C", ESP_LOG_DEBUG);
     //esp_log_level_set("VL53L5CX Api", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK", ESP_LOG_DEBUG);
     esp_log_level_set("SLAMDECK API", ESP_LOG_DEBUG);
     //esp_log_level_set("WIFI", ESP_LOG_DEBUG);
-    esp_log_level_set("COM", ESP_LOG_DEBUG);
+    //esp_log_level_set("COM", ESP_LOG_DEBUG);
     //esp_log_level_set("UART", ESP_LOG_DEBUG);
     //esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set("Platform", ESP_LOG_DEBUG);
@@ -79,6 +79,10 @@ void app_main(void)
     io_init();
     i2c_init();
 
+    led_set_state(LED_RED, LED_STATE_BLINK_1_HZ);
+
+    // TODO: FIX DEFUALT SETTINGS
+
     // Initialize esp APP transport before "com"
     espTransportInit();
     #ifndef DISABLED_WIFI_API
@@ -86,11 +90,10 @@ void app_main(void)
         com_init();
         wifi_init();
         router_init();
-        //wifi_ctrl();
+        //wifi_connect();
     #endif
 
     slamdeck_init();
     slamdeck_api_init();
 
-    led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
 }

@@ -443,8 +443,6 @@ void wifi_transport_receive(CPXRoutablePacket_t* packet) {
 void wifi_init() {
   esp_netif_init();
 
-  led_set_state(LED_RED, LED_STATE_BLINK_0_25_HZ);
-
   s_wifi_event_group = xEventGroupCreate();
 
   wifiRxQueue = xQueueCreate(WIFI_HOST_QUEUE_LENGTH, sizeof(WifiTransportPacket_t));

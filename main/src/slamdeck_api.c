@@ -55,6 +55,10 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
     switch (rx->command) {
         case SLAMDECK_COMMAND_GET_DATA: {
             tx->size = slamdeck_get_sensor_data(tx->data, status);
+            //tx->size = 640;
+            //for (int i = 0; i < tx->size; i++) {
+            //    tx->data[i] = i;
+            //}
             //ESP_LOGI(TAG, "Size: %d", tx->size);
             //ESP_LOG_BUFFER_HEX(TAG, tx->data, tx->size);
             break;
@@ -97,14 +101,9 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
 
 static void send_to_cpx(const slamdeck_packet_tx_t* tx)
 {
-    static esp_routable_packet_t tx_esp = {
-        .route={
-            //.destination=CPX_T_HOST,
-            .destination=CPX_T_STM32,
-            .source=CPX_T_ESP32,
-            .function=CPX_F_APP
-        }
-    };
+    static esp_routable_packet_t tx_esp;
+    cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_APP, &tx_esp.route);
+    //cpxInitRoute(CPX_T_ESP32, CPX_T_HOST_NRF, CPX_F_APP, &tx_esp.route);
     memcpy(tx_esp.data, (const void*) tx->data, tx->size);
     tx_esp.dataLength = tx->size;
     espAppSendToRouterBlocking(&tx_esp);
@@ -126,15 +125,7 @@ static void slamdeck_api_task_tx()
             send_to_cpx(&tx);
         }
 
-        /*
-        if (slamdeck.gpio_cf_io_2 == 1) {
-            slamdeck_state = SLAMDECK_STATE_STREAMING;
-        } else {
-            slamdeck_state = SLAMDECK_STATE_IDLE;
-        }
-        */
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(5 / portTICK_PERIOD_MS);
     }
 }
 
@@ -175,6 +166,8 @@ void slamdeck_api_init()
 
     xTaskCreate(slamdeck_api_task_tx, "API TX", 5000, NULL, 2, NULL);
     xTaskCreate(slamdeck_api_task_rx, "API RX", 5000, NULL, 2, NULL);
+
+    //slamdeck_state = SLAMDECK_STATE_STREAMING;
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_API_RX | START_UP_API_TX,

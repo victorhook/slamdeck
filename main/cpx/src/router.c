@@ -121,6 +121,10 @@ static void route(Receiver_t receive, CPXRoutablePacket_t* rxp, RouteContext_t* 
         ESP_LOGD(TAG, "%s [0x%02X] -> STM32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, uart_transport_send, UART_TRANSPORT_MTU - CPX_ROUTING_PACKED_SIZE);
         break;
+      case CPX_T_HOST_NRF:
+        ESP_LOGD(TAG, "%s [0x%02X] -> HOST_NRF [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
+        splitAndSend(rxp, context, uart_transport_send, UART_TRANSPORT_MTU - CPX_ROUTING_PACKED_SIZE);
+        break;
       case CPX_T_ESP32:
         ESP_LOGD(TAG, "%s [0x%02X] -> ESP32 [0x%02X] (%u)", routerName, source, destination, cpxDataLength);
         splitAndSend(rxp, context, espTransportSend, ESP_TRANSPORT_MTU);

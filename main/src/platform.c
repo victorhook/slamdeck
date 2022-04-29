@@ -38,7 +38,7 @@ uint8_t WrMulti(
 	#endif
 	uint8_t res = i2c_master_write_to_reg16(p_platform->address, RegisterAdress, p_values, size);
 	if (res != ESP_OK) {
-		ESP_LOGE(TAG, "I2C ERROR: %d", res);
+		ESP_LOGE(TAG, "I2C ERROR: %s", esp_err_to_name(res));
 	}
 	return res;
 }
@@ -54,7 +54,7 @@ uint8_t RdMulti(
 		ESP_LOGD(TAG, "[%02x] Read %02x to %04x", p_platform->address, *p_value, RegisterAdress);
 	#endif
 	if (res != ESP_OK) {
-		ESP_LOGE(TAG, "I2C ERROR: %d", res);
+		ESP_LOGE(TAG, "I2C ERROR: %s", esp_err_to_name(res));
 	}
 	return res;
 }

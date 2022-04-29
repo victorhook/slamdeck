@@ -9,20 +9,17 @@ from collections import namedtuple
 from re import X
 
 import time
-from PyQt5 import uic
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from slamdeck_python.slamdeck import Slamdeck, SlamdeckSensorId, VL53L5CX
 import math
-from  matplotlib.colors import LinearSegmentedColormap, rgb2hex
+from matplotlib.colors import LinearSegmentedColormap, rgb2hex
 from timeit import default_timer as timer
 
 from vispy import scene
 import numpy as np
 
-import copy
 import typing as t
-
-from slamdeck_python.utils import time_function, CrazyflieModel
+from gui.models import ModelVL53L5CX, ModelCrazyflie
+from gui.slamdeck import SlamdeckSensorId
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +63,7 @@ class Visualizer3d(scene.SceneCanvas):
 
     cmap = LinearSegmentedColormap.from_list('r',["r", "w", "g"], N=MAX_DISTANCE)
 
-    def __init__(self, slamdeck: Slamdeck):
+    def __init__(self, sensor_models: t.List[ModelVL53L5CX], crazyflie: ModelVL53L5CX):
         scene.SceneCanvas.__init__(self, keys=None)
         self.unfreeze()
 
@@ -80,7 +77,7 @@ class Visualizer3d(scene.SceneCanvas):
             up='+z',
             center=(0.0, 0.0, 0.0))
 
-        self._cf = slamdeck.get_crazyflie()
+        self._cf = crazyflie
         self._cf_line_size = 0.5
         self._cf_pos = np.array([self._cf.x, self._cf.y, self._cf.z])
         self._cf_marker = scene.visuals.Markers(
@@ -104,20 +101,13 @@ class Visualizer3d(scene.SceneCanvas):
         #self._cf_arrow = self.make_cf_arrow(0.5, 0.02, 0.1, 0.1, self._view.scene)
 
         # Subscribe to models
-        self.slamdeck = slamdeck
-        self._sensors = [
-            #self.slamdeck.get_sensor(SlamdeckSensorId.MAIN),
-            self.slamdeck.get_sensor(SlamdeckSensorId.FRONT),
-            self.slamdeck.get_sensor(SlamdeckSensorId.RIGHT),
-            self.slamdeck.get_sensor(SlamdeckSensorId.BACK),
-            self.slamdeck.get_sensor(SlamdeckSensorId.LEFT)
-        ]
+        self._sensors = sensor_models
         self._rotation_matrices = {
-            SlamdeckSensorId.MAIN: RotationMatrix.MAIN,
-            SlamdeckSensorId.FRONT: RotationMatrix.FRONT,
-            SlamdeckSensorId.RIGHT: RotationMatrix.RIGHT,
-            SlamdeckSensorId.BACK: RotationMatrix.BACK,
-            SlamdeckSensorId.LEFT: RotationMatrix.LEFT
+            self._sensors[0].id: RotationMatrix.MAIN,
+            self._sensors[1].id: RotationMatrix.FRONT,
+            self._sensors[2].id: RotationMatrix.RIGHT,
+            self._sensors[3].id: RotationMatrix.BACK,
+            self._sensors[4].id: RotationMatrix.LEFT
         }
 
         # Set grid size and pixel offset
@@ -132,7 +122,7 @@ class Visualizer3d(scene.SceneCanvas):
         self._graph_timer = QTimer()
         self._graph_timer.setInterval(int(1000 / self.FPS))
         self._graph_timer.timeout.connect(self._update_graphics)
-        self._graph_timer.start()
+        #self._graph_timer.start()
 
         self.t0 = time.time()
 
@@ -144,12 +134,12 @@ class Visualizer3d(scene.SceneCanvas):
 
     def _get_coordinate(self, row: int, col: int, distance: int, rotation_matrix: np.ndarray) -> np.array:
         grid_pad = 1 / self.grid_size
-        center = (self.grid_size / 2) - 0.5
+        center = (self.grid_size / 2)
 
         grid_vector = np.array([
             1.0,
-            grid_pad * ( col - center ),
-            grid_pad * ( row - center )
+            grid_pad * ( col - center + 0.5),
+            grid_pad * ( row - center + 0.5)
         ])
 
         # Scale to unit vector
@@ -164,7 +154,7 @@ class Visualizer3d(scene.SceneCanvas):
         # Scale down to fit world size
         grid_vector /= 1000
 
-        roll_pitch_yaw = np.array([self._cf.roll_degrees, self._cf.pitch_degrees, self._cf.yaw_degrees])
+        roll_pitch_yaw = np.array([self._cf.roll, self._cf.pitch, self._cf.yaw])
         grid_vector = ( self._rpy_to_rot(np.deg2rad(roll_pitch_yaw)) @ grid_vector) + self._cf_pos
 
         #  x: col - horizontal
@@ -247,14 +237,13 @@ class Visualizer3d(scene.SceneCanvas):
         return np.array(r)
 
     def rotate_to_cf(self, vector: np.ndarray) -> np.ndarray:
-        roll_pitch_yaw = np.array([self._cf.roll_degrees, self._cf.pitch_degrees, self._cf.yaw_degrees])
+        roll_pitch_yaw = np.array([self._cf.roll, self._cf.pitch, self._cf.yaw])
         cf_rotation = self._rpy_to_rot(np.deg2rad(roll_pitch_yaw))
         vector = cf_rotation @ vector # Rotate
         return vector
 
     def _make_cf_lines(self, parent) -> np.ndarray:
         x, y, z = self._create_cf_lines()
-        print(y)
         x = scene.visuals.LinePlot(x, width=0.3, color='red', parent=parent, marker_size=0.0)
         y = scene.visuals.LinePlot(y, width=0.3, color='green', parent=parent, marker_size=0.0)
         z = scene.visuals.LinePlot(z, width=0.3, color='blue', parent=parent, marker_size=0.0)

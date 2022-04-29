@@ -28,6 +28,7 @@ from slamdeck_tab import SlamdeckTab
 (main_window_class,
  main_windows_base_class) = uic.loadUiType(Path(__file__).parent.joinpath('ui/main.ui'))
 
+logging.basicConfig(level=logging.INFO)
 
 
 class MainUI(QtWidgets.QMainWindow, main_window_class):
@@ -62,7 +63,7 @@ def main():
 
     logging.basicConfig(level=logging.DEBUG)
 
-    from gui import MainUI
+    from main import MainUI
     from PyQt5.QtWidgets import QApplication
     from PyQt5.QtGui import QIcon
 

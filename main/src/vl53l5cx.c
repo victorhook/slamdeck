@@ -21,6 +21,18 @@
 
 #define DO_DEBUG
 
+/*
+static const VL53L5CX_settings_t sensor_settings_default = {
+    .integration_time_ms = 5,
+    .sharpener_percent = 5,
+    .ranging_frequency_hz = 15,
+    .resolution = VL53L5CX_RESOLUTION_8X8,
+    .power_mode = VL53L5CX_POWER_MODE_WAKEUP,
+    .target_order = VL53L5CX_TARGET_ORDER_STRONGEST,
+    .ranging_mode = VL53L5CX_RANGING_MODE_AUTONOMOUS
+};
+*/
+
 
 static const char* TAG = "VL53L5CX";
 
@@ -82,6 +94,7 @@ uint8_t VL53L5CX_is_alive(VL53L5CX_t* sensor)
         return VL53L5CX_STATUS_TIMEOUT_ERROR;;
     }
 
+    ESP_LOGI(TAG, "PING OK");
     uint8_t is_alive;
     vl53l5cx_is_alive(&sensor->config, &is_alive);
     return VL53L5CX_STATUS_OK;
