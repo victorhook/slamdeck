@@ -102,8 +102,8 @@ static uint8_t api_handler(const slamdeck_packet_rx_t* rx, slamdeck_packet_tx_t*
 static void send_to_cpx(const slamdeck_packet_tx_t* tx)
 {
     static esp_routable_packet_t tx_esp;
-    cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_APP, &tx_esp.route);
-    //cpxInitRoute(CPX_T_ESP32, CPX_T_HOST_NRF, CPX_F_APP, &tx_esp.route);
+    //cpxInitRoute(CPX_T_ESP32, CPX_T_STM32, CPX_F_APP, &tx_esp.route);
+    cpxInitRoute(CPX_T_ESP32, CPX_T_HOST_NRF, CPX_F_APP, &tx_esp.route);
     memcpy(tx_esp.data, (const void*) tx->data, tx->size);
     tx_esp.dataLength = tx->size;
     espAppSendToRouterBlocking(&tx_esp);
@@ -167,7 +167,7 @@ void slamdeck_api_init()
     xTaskCreate(slamdeck_api_task_tx, "API TX", 5000, NULL, 2, NULL);
     xTaskCreate(slamdeck_api_task_rx, "API RX", 5000, NULL, 2, NULL);
 
-    //slamdeck_state = SLAMDECK_STATE_STREAMING;
+    slamdeck_state = SLAMDECK_STATE_STREAMING;
 
     xEventGroupWaitBits(startUpEventGroup,
                         START_UP_API_RX | START_UP_API_TX,

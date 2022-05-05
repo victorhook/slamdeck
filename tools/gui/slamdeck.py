@@ -254,6 +254,9 @@ class Slamdeck:
         self.cb_connected.call()
         print(f'Connected to {uri}')
 
+        print('Starting streaming directly!')
+        self.start_streaming()
+
         # Attach logger to cf object.
         self._add_cf_logging()
 
@@ -282,6 +285,6 @@ if __name__ == '__main__':
     import time
     time.sleep(1)
     slamdeck.start_streaming()
-    time.sleep(1)
+    time.sleep(10)
 
     slamdeck.disconnect()

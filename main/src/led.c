@@ -70,6 +70,13 @@ static void led_change_state(const slamdeck_led_e led, const slamdeck_led_state_
 void led_set_state(const slamdeck_led_e led, const slamdeck_led_state_e state)
 {
     led_change_state(led, state, get_current_time());
+    /*
+    if (led->state == LED_STATE_ON) {
+
+    } else if (led->state == LED_STATE_OFF) {
+
+    }
+    */
 }
 
 void led_task()

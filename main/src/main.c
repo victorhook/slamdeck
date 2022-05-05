@@ -75,13 +75,23 @@ void app_main(void)
     ESP_LOGI(TAG, "Available esp_get_free_heap_size: %d", esp_get_free_heap_size());
     ESP_LOGI(TAG, "Available esp_get_free_internal_heap_size: %d", esp_get_free_internal_heap_size());
 
+    uint32_t t0 = get_current_time();
+
     led_init();
     io_init();
     i2c_init();
 
+    /*
+    gpio_set_level(SLAMDECK_GPIO_LED_BLUE, 1);
+    while (1) {
+        vTaskDelay(portMAX_DELAY);
+    }
+    */
+
     led_set_state(LED_RED, LED_STATE_BLINK_1_HZ);
 
     // TODO: FIX DEFUALT SETTINGS
+
 
     // Initialize esp APP transport before "com"
     espTransportInit();
@@ -93,7 +103,11 @@ void app_main(void)
         //wifi_connect();
     #endif
 
+
     slamdeck_init();
     slamdeck_api_init();
+
+    uint32_t t1 = get_current_time() - t0;
+    ESP_LOGI(TAG, "Boot time: %d", t1 - t0);
 
 }

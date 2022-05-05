@@ -12,6 +12,7 @@ class CPXTarget(enum.Enum):
   ESP32 = 2
   HOST = 3
   GAP8 = 4
+  HOST_NRF = 5
 
 
 class CPXFunction(enum.Enum):
@@ -32,7 +33,9 @@ class CPXPacket(object):
     A packet with routing and data
     """
 
-    def __init__(self, function=0, destination=0, source=CPXTarget.HOST, data=bytearray(), wireHeader=None):
+    HEADER_SIZE = 2
+
+    def __init__(self, function=0, destination=0, source=CPXTarget.HOST, data=bytearray(), raw_data=None):
         """
         Create an empty packet with default values.
         """
@@ -40,16 +43,22 @@ class CPXPacket(object):
         self.source = source
         self.destination = destination
         self.function = function
-        self._wireHeaderFormat = "<HBB"
+        self._wireHeaderFormat = "BB"
         self.length = 0
         self.lastPacket = False
-        if wireHeader:
-            [self.length, targetsAndFlags, self.function] = struct.unpack(self._wireHeaderFormat, wireHeader)
+
+        if raw_data is not None:
+            targetsAndFlags, self.function = struct.unpack(self._wireHeaderFormat, raw_data[:self.HEADER_SIZE])
 
             self.source = CPXTarget((targetsAndFlags >> 3) & 0x07)
             self.destination = CPXTarget(targetsAndFlags & 0x07)
             self.lastPacket = targetsAndFlags & 0x40 != 0
             self.function = CPXFunction(self.function)
+            self.data = raw_data[self.HEADER_SIZE:]
+            self.length = self.data
+
+    def __len__(self) -> int:
+      return len(self.data)
 
     def _get_wire_data(self):
         """Create raw data to send via the wire"""
@@ -74,7 +83,9 @@ class CPXPacket(object):
 
     def __str__(self):
         """Get a string representation of the packet"""
-        return "{}->{}/{} (size={} bytes)".format(self.source, self.destination, self.function, self.length)
+        return f'{self.source.name} -> {self.destination.name}' + \
+               f' / {self.function.name} [{self.length:3} bytes]' + \
+               f' Last: {self.lastPacket}'
 
     wireData = property(_get_wire_data, None)
 

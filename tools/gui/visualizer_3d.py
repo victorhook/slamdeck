@@ -87,7 +87,6 @@ class Visualizer3d(scene.SceneCanvas):
         )
 
         plane_size = 10
-        """
         scene.visuals.Plane(
             width=plane_size,
             height=plane_size,
@@ -96,7 +95,7 @@ class Visualizer3d(scene.SceneCanvas):
             color=(0.5, 0.5, 0.5, 0.5),
             edge_color="gray",
             parent=self._view.scene)
-        """
+
         self._cf_lines = self._make_cf_lines(self._view.scene)
         #self._cf_arrow = self.make_cf_arrow(0.5, 0.02, 0.1, 0.1, self._view.scene)
 
@@ -122,7 +121,7 @@ class Visualizer3d(scene.SceneCanvas):
         self._graph_timer = QTimer()
         self._graph_timer.setInterval(int(1000 / self.FPS))
         self._graph_timer.timeout.connect(self._update_graphics)
-        #self._graph_timer.start()
+        self._graph_timer.start()
 
         self.t0 = time.time()
 

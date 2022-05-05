@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (QMessageBox, QWidget, QGraphicsScene, QGraphicsView
                             QGraphicsTextItem, QGraphicsRectItem, QComboBox,
                             QLabel, QLineEdit, QPushButton, QPlainTextEdit,
                             QTabWidget, QOpenGLWidget, QFrame, QVBoxLayout, QRadioButton)
+
 from pathlib import Path
 
 # Gui imports
@@ -16,6 +17,7 @@ from tab import Tab
 #from flight_controller import FlightController
 
 from gui import utils
+from gui.flight_controller import FlightController
 from gui.slamdeck import Slamdeck, SlamdeckSensorId, SlamdeckSettings
 from gui.data_link import DataLinkNrfCRTP, DataLinkSocketTCP, DataLinkType
 from gui.visualizer_2d_matrix import Visualizer2dMatrix
@@ -108,10 +110,13 @@ class SlamdeckTab(Tab, slamdeck_class):
         lay = QVBoxLayout(self.graphics3dVisualizer)
         lay.addWidget(self.visualizer_3d.native)
 
-        # Build sensor UI graphics.
-
-        #self._fc = FlightController(self._cf, self.visualizer_3d)
-
+        # Attach flight controller. TODO: Fix private access...
+        self._fc = FlightController(self._slamdeck._cf, {
+            'x': self.fcX,
+            'y': self.fcY,
+            'z': self.fcZ,
+            'yaw': self.fcYaw,
+        })
 
         # -- Attach callbacks -- #
 
@@ -149,6 +154,17 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.vbat: float = 0.0
 
         self.ui_timer = utils.start_timer(self._update_ui, self.UPDATE_FREQUENCY)
+
+        from PyQt5.QtCore import Qt
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+
+
+    def keyPressEvent(self, event):
+        self._fc.on_key_press(event)
+
+    def keyReleaseEvent(self, event):
+        self._fc.on_key_release(event)
 
     def _sensor_changed(self) -> None:
         self.sensor_single.set_sensor(self._current_sensor())

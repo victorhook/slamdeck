@@ -3,6 +3,7 @@ from enum import IntEnum
 import socket
 from queue import Queue
 from threading import Thread
+from time import time
 
 from cflib.crazyflie import Crazyflie
 from cflib.crtp.crtpstack import CRTPPacket, CRTPPort
@@ -11,6 +12,12 @@ import cflib.crtp  # noqa
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+USE_CPX = True
+
+if USE_CPX:
+    from new_stuff.cpx import CPXPacket
 
 
 class DataLinkType(IntEnum):
@@ -72,21 +79,42 @@ class DataLinkNrfCRTP(DataLink):
         packet.data = data
         self._tx.put(packet)
 
+    b = 0
+    t0 = 0
+    a = 0
+
     def _incoming(self, packet: CRTPPacket):
-        self._rx_buf.extend(packet.data)
+        t = time()
+        if self.t0 == 0:
+            self.t0 = t
 
-        if packet.channel == self.LAST_PACKET_OF_FRAME:
-            self._rx.put(self._rx_buf)
-            self._rx_buf = bytearray()
+        if (t - self.t0) > 1:
+            print(self.b)
+            self.b = 0
+            self.t0 = t
 
-        return
+        if USE_CPX:
+            #print(' '.join([bin(a)[2:].zfill(8) for a in packet.data[:2]]))
+            cpx_packet = CPXPacket(raw_data=packet.data)
+
+            self._rx_buf.extend(cpx_packet.data)
+            self.b += len(packet.data)
+
+            if cpx_packet.lastPacket:
+                self._rx.put(self._rx_buf)
+                self._rx_buf = bytearray()
+        else:
+            if packet.channel == self.LAST_PACKET_OF_FRAME:
+                self._rx.put(self._rx_buf)
+                self._rx_buf = bytearray()
 
     def _disconnected(self, uri: str) -> None:
         self._is_connected = False
 
     def _connected(self, uri: str) -> None:
         self._is_connected = True
-        Thread(target=self._run, daemon=True).start()
+        if not USE_CPX:
+            Thread(target=self._run, daemon=True).start()
 
     def _write(self) -> int:
         packet = self._tx.get()
