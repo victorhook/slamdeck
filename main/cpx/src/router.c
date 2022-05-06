@@ -169,14 +169,14 @@ void router_init() {
   //xTaskCreate(router_from_gap8, "Router from GAP8", 5000, NULL, 1, NULL);
   xTaskCreate(router_from_crazyflie, "Router from CF", 5000, NULL, 2, NULL);
   xTaskCreate(router_from_esp32, "Router from ESP32", 5000, NULL, 2, NULL);
-  xTaskCreate(router_from_wifi, "Router from WIFI", 5000, NULL, 2, NULL);
+  //xTaskCreate(router_from_wifi, "Router from WIFI", 5000, NULL, 2, NULL);
 
   ESP_LOGI(TAG, "Waiting for tasks to start");
   xEventGroupWaitBits(startUpEventGroup,
                       //START_UP_GAP8_ROUTER_RUNNING |
                       START_UP_CF_ROUTER_RUNNING |
-                      START_UP_ESP_ROUTER_RUNNING |
-                      START_UP_WIFI_ROUTER_RUNNING,
+                      START_UP_ESP_ROUTER_RUNNING,// |
+                      //START_UP_WIFI_ROUTER_RUNNING,
                       pdTRUE, // Clear bits before returning
                       pdTRUE, // Wait for all bits
                       portMAX_DELAY);

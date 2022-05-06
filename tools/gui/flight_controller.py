@@ -4,6 +4,7 @@ from vispy import scene
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
+from cflib.positioning.motion_commander import MotionCommander
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
 
@@ -26,11 +27,13 @@ class FlyState(IntEnum):
 
 class FlightController(QtWidgets.QWidget):
 
-    SPEED_FACTOR = 0.3
+    SPEED_FACTOR = 0.8
+    STARTUP_TIME = 1
 
     def __init__(self, cf: Crazyflie, labels: list):
         super().__init__()
         self.cf = cf
+        self.mc = MotionCommander(self.cf)
         self.labels = labels
 
         self.hover = {'x': 0.0, 'y': 0.0, 'yaw': 0.0, 'z': 0.0}
@@ -48,26 +51,56 @@ class FlightController(QtWidgets.QWidget):
 
         self._state = FlyState.IDLE
         self.t0 = 0
-        self._sent = False
+        self.t1 = 0
+        self._taken_off = False
+        self._landed = False
+
+    def start(self) -> None:
+        if self._state == FlyState.IDLE:
+            self._state = FlyState.STARTUP
+            self.t0 = time()
+
+    def stop(self) -> None:
+        if self._state == FlyState.FLYING:
+            self.t1 = time()
+            self._state = FlyState.LANDING
 
     def _update_labels(self) -> None:
         self.labels['x'].setText(str(self.hover['x']))
         self.labels['y'].setText(str(self.hover['y']))
         self.labels['z'].setText(str(self.hover['z']))
         self.labels['yaw'].setText(str(self.hover['yaw']))
+        self.labels['mode'].setText(self._state.name)
 
     def sendHoverCommand(self):
         if self._state == FlyState.IDLE:
-            self.cf.commander.send_stop_setpoint()
-        elif self._state == FlyState.STARTUP:
-            if not self._sent:
-                #self.cf.param.set_value('powerDist.idleThrust', 20000)
-                self._sent = True
+            if self.cf.is_connected():
+                self.cf.param.set_value('powerDist.idleThrust', 0)
+
+        elif self._state == FlyState.LANDING:
+            if not self._landed:
+                self.cf.commander.send_hover_setpoint(0, 0, 0, 0)
+
             now = time()
-            if (now - self.t0) > 1:
+            if (now - self.t1) > self.STARTUP_TIME:
+                self._landed = True
+                self._taken_off = False
+                self._state = FlyState.IDLE
+
+        elif self._state == FlyState.STARTUP:
+            if not self._taken_off:
+                if self.cf.is_connected():
+                    #self.mc.take_off(0.1)
+                    print('Sending power thrust!')
+                    self.cf.param.set_value('powerDist.idleThrust', 20000)
+                    self._taken_off = True
+                    self._landed = False
+                else:
+                    print('Not connected!')
+            now = time()
+            if (now - self.t0) > self.STARTUP_TIME:
                 self._state = FlyState.FLYING
         elif self._state == FlyState.FLYING:
-            return
             self.cf.commander.send_hover_setpoint(
                 self.hover['x'],
                 self.hover['y'],
@@ -136,7 +169,6 @@ class FlightController(QtWidgets.QWidget):
                 self.keyCB('yaw', 0)
             if (event.key() == QtCore.Qt.Key_F):
                 if self._state == FlyState.IDLE:
-                    self._state = FlyState.STARTUP
-                    self.t0 = time()
+                    self.start()
                 elif self._state == FlyState.FLYING:
-                    self._state = FlyState.IDLE
+                    self.stop()

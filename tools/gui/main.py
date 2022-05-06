@@ -66,9 +66,11 @@ def main():
     from main import MainUI
     from PyQt5.QtWidgets import QApplication
     from PyQt5.QtGui import QIcon
+    import qdarkstyle
 
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
+    #app.setStyle("Fusion")
+    app.setStyleSheet(qdarkstyle.load_stylesheet())
 
     app.setApplicationName("Slamdeck Proof of concept")
     main_window = MainUI()

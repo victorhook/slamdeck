@@ -55,7 +55,7 @@ class CPXPacket(object):
             self.lastPacket = targetsAndFlags & 0x40 != 0
             self.function = CPXFunction(self.function)
             self.data = raw_data[self.HEADER_SIZE:]
-            self.length = self.data
+            self.length = len(self.data)
 
     def __len__(self) -> int:
       return len(self.data)

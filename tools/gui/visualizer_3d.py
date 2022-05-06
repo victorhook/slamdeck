@@ -203,10 +203,9 @@ class Visualizer3d(scene.SceneCanvas):
             self.point_cloud.set_data(pos=coordinates, face_color=colors, size=sizes, edge_color=(0, 0, 0, 0))
 
         # Update Crazyflie
-        self._cf_pos[2] = 0.01
-        #self._cf_pos[0] = self._cf.x
-        #self._cf_pos[1] = self._cf.y
-        #self._cf_pos[2] = self._cf.z
+        self._cf_pos[0] = self._cf.x
+        self._cf_pos[1] = self._cf.y
+        self._cf_pos[2] = self._cf.z + 0.5
         x, y, z = self._create_cf_lines()
         self._cf_lines[0].set_data(x) # x axis
         self._cf_lines[1].set_data(y) # y axis

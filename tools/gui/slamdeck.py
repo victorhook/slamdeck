@@ -89,10 +89,12 @@ class Slamdeck:
     def __init__(self,
             current_data_link: DataLinkType,
             sensors: t.List[ModelVL53L5CX],
-            crazyflie: ModelCrazyflie
+            crazyflie: ModelCrazyflie,
+            vbat = None
         ) -> None:
         self._model_senors = sensors
         self._model_cf = crazyflie
+        self._vbat = vbat
 
         # Create Crazyflie object
         self._cf = Crazyflie(rw_cache='./cache')
@@ -173,7 +175,10 @@ class Slamdeck:
                 self._dlink.disconnect()
             elif action == Action.GET_DATA:
                 data = self._dlink.read()
-                self._update_sensor_models(data)
+                if data is not None:
+                    self._update_sensor_models(data)
+                else:
+                    print('No data')
             elif action == Action.START_STREAMING:
                 self._is_streaming = True
             elif action == Action.STOP_STREAMING:
@@ -225,17 +230,13 @@ class Slamdeck:
         logconf.add_variable('stabilizer.roll', 'float')
         logconf.add_variable('stabilizer.pitch', 'float')
         logconf.add_variable('stabilizer.yaw', 'float')
+        logconf.add_variable('pm.vbat', 'FP16')
 
-        try:
-            self._cf.log.add_config(logconf)
-            logconf.data_received_cb.add_callback(self._log_data)
-            logconf.error_cb.add_callback(self._log_error)
-            logconf.start()
-        except KeyError as e:
-            print('Could not start log configuration,'
-                  '{} not found in TOC'.format(str(e)))
-        except AttributeError as e:
-            print('Could not add Stabilizer log config, bad configuration. {e}')
+        self._cf.log.add_config(logconf)
+        logconf.data_received_cb.add_callback(self._log_data)
+        logconf.error_cb.add_callback(self._log_error)
+        logconf.start()
+
 
     # -- Callbacks -- #
     def _disconnected(self, uri: str, msg: str = None) -> None:
@@ -275,12 +276,15 @@ class Slamdeck:
         self._model_cf.roll = data['stabilizer.roll']
         self._model_cf.pitch = data['stabilizer.pitch']
         self._model_cf.yaw = data['stabilizer.yaw']
+        if self._vbat is not None:
+            self._vbat(data["pm.vbat"])
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     sensors = [ModelVL53L5CX(id=id.value) for id in SlamdeckSensorId]
     cf = ModelCrazyflie()
     slamdeck = Slamdeck(DataLinkType.NRF_CRTP, sensors, cf)
-    slamdeck.connect('radio://0/80/2M/E7E7E7E7E7')
+    slamdeck.connect('radio://0/90/2M/E7E7E7E7E7')
 
     import time
     time.sleep(1)

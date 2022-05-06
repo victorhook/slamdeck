@@ -81,13 +81,11 @@ class Visualizer2dMatrix(QObject):
     def _create_grids(self) -> t.List[t.List['Grid']]:
         self.scene.clear()
         self.grids: t.List[t.List['Grid']] = []
+        
         if self.grid_per_row == SensorDimension.DIMENSION_4X4:
-            grid_size = 150
+            grid_size = self.graphics.width() // 4
         else:
-            grid_size = 70
-
-        if self._is_small:
-            grid_size *= 0.3
+            grid_size = self.graphics.width() // 8
 
         for r in range(self.grid_per_row):
             self.grids.append([])

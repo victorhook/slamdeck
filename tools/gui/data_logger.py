@@ -1,0 +1,2 @@
+class DataLogger:
+    pass

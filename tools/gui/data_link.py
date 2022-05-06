@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
+import queue
 import socket
 from queue import Queue
 from threading import Thread
@@ -71,7 +72,10 @@ class DataLinkNrfCRTP(DataLink):
         self._cf.close_link()
 
     def read(self) -> bytes:
-        return self._rx.get()
+        try:
+            return self._rx.get(timeout=1)
+        except queue.Empty:
+            return None
 
     def write(self, data: bytes) -> int:
         packet = CRTPPacket()
@@ -112,6 +116,8 @@ class DataLinkNrfCRTP(DataLink):
         self._is_connected = False
 
     def _connected(self, uri: str) -> None:
+        self.write(b'0')
+        self._write()
         self._is_connected = True
         if not USE_CPX:
             Thread(target=self._run, daemon=True).start()

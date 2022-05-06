@@ -48,7 +48,7 @@ class SlamdeckTab(Tab, slamdeck_class):
 
     DEFAULT_IP = '192.168.6.83'
     DEFAULT_PORT = '5000'
-    DEFAULT_NFR_ADDRESS = '0/80/2M/E7E7E7E7E7'
+    DEFAULT_NFR_ADDRESS = '0/90/2M/E7E7E7E7E7'
 
     _data_links = {dlink.name: dlink for dlink in DataLinkType}
 
@@ -57,12 +57,14 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.setupUi(self)
         self.tabWidget = tabWidget
 
+        self.vbat: float = 0.0
+
         # Create sensor and crazyflie models.
         self._model_sensors = [ModelVL53L5CX(id=id.value) for id in SlamdeckSensorId]
         self._model_cf = ModelCrazyflie()
         self._data_link = DataLinkType.NRF_CRTP
 
-        self._slamdeck = Slamdeck(self._data_link, self._model_sensors, self._model_cf)
+        self._slamdeck = Slamdeck(self._data_link, self._model_sensors, self._model_cf, self.set_vbat)
 
         # Get references to children Qt elements
         self.comboSensor: QComboBox = self.findChild(QComboBox, 'comboSensor')
@@ -101,7 +103,7 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.sensor_left = Visualizer2dMatrix(self.sensorLeft, self._model_sensors[SlamdeckSensorId.LEFT], small=True)
 
         # 2D Point cloud
-        self.visualizer_2d_point_cloud = Visualizer2dPointCloud(self._model_sensors, self._model_cf, self.checkBoxLayout, self.checkBoxGraphics, None)
+        self.visualizer_2d_point_cloud = Visualizer2dPointCloud(self._model_sensors, self._model_cf, self.checkBoxLayout, None)
         #lay = QVBoxLayout(self.graphics3dVisualizer)
         self.layout2dPointCloud.addWidget(self.visualizer_2d_point_cloud.native)
 
@@ -116,7 +118,10 @@ class SlamdeckTab(Tab, slamdeck_class):
             'y': self.fcY,
             'z': self.fcZ,
             'yaw': self.fcYaw,
+            'mode': self.fcMode
         })
+        self.fcStart.clicked.connect(self._fc.start)
+        self.fcStop.clicked.connect(self._fc.stop)
 
         # -- Attach callbacks -- #
 
@@ -130,7 +135,6 @@ class SlamdeckTab(Tab, slamdeck_class):
         self.btnSensor.clicked.connect(self._set_settings)
         self.btnConnect.clicked.connect(self._connect)
         self.btnDisconnect.clicked.connect(self._disconnect)
-        self.btnTest.clicked.connect(self._test)
         self.btnStartStreaming.clicked.connect(self._start_streaming)
         self.btnStopStreaming.clicked.connect(self._stop_streaming)
 
@@ -151,14 +155,14 @@ class SlamdeckTab(Tab, slamdeck_class):
         self._data_links_changed()
         self._s_update_sensor_settings_ui.emit()
 
-        self.vbat: float = 0.0
 
         self.ui_timer = utils.start_timer(self._update_ui, self.UPDATE_FREQUENCY)
 
         from PyQt5.QtCore import Qt
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-
+    def set_vbat(self, vbat: float):
+        self.vbat = vbat
 
     def keyPressEvent(self, event):
         self._fc.on_key_press(event)
@@ -252,12 +256,11 @@ class SlamdeckTab(Tab, slamdeck_class):
     def _update_ui(self) -> None:
         self.labelFrameRate.setText(f'{self._slamdeck.get_frame_rate()} frames/sec')
         self.labelDataRate.setText(f'{self._slamdeck.get_data_rate()} bytes/sec')
-        self.labelBattery.setText(str(round(self.vbat, 3)))
+        self.labelBattery.setText(f'{self.vbat:.3} V')
 
     def _update_button_states(self, connected: bool) -> None:
         self.btnDisconnect.setEnabled(connected)
         self.btnConnect.setEnabled(not connected)
-        self.btnTest.setEnabled(connected)
         self.btnStartStreaming.setEnabled(connected)
         self.btnStopStreaming.setEnabled(connected)
 

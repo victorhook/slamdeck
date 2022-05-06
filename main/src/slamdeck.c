@@ -277,7 +277,7 @@ static void slamdeck_task()
                 sensor->samples = 0;
             }
             //printf("\n");
-            print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_MAIN]);
+            //print_sensor_data(&sensors[SLAMDECK_SENSOR_ID_MAIN]);
         }
 
 
@@ -307,7 +307,7 @@ void slamdeck_init()
                         pdTRUE, // Wait for all bits
                         portMAX_DELAY);
 
-    led_set_state(LED_BLUE, LED_STATE_BLINK_1_HZ);
+    led_set_state(LED_BLUE, LED_STATE_ON);
     ESP_LOGI(TAG, "initialized");
 }
 

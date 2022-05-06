@@ -12,6 +12,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsScale, QCheckBox, QSizePolicy, QSpacerItem, QVBoxLayout, QGraphicsView, QGraphicsEllipseItem, QRadioButton
 from PyQt5.QtGui import QPen, QColor, qRgb, QTextBlock, QBrush
 from gui.models import ModelCrazyflie, ModelVL53L5CX, VL53L5CX_Resolution
+from gui import utils
 
 from vispy import scene
 
@@ -52,7 +53,6 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
             sensors: t.List[ModelVL53L5CX],
             crazyflie: ModelCrazyflie,
             checkBoxLayout: QVBoxLayout,
-            checkBoxGraphics: QGraphicsView,
             graphics: QGraphicsView
         ):
         scene.SceneCanvas.__init__(self, keys=None)
@@ -76,29 +76,12 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
         self.graphics = graphics
         self.checkBoxLayout = checkBoxLayout
 
-        self.checkBoxGraphics = checkBoxGraphics
-        self.checkScene = QGraphicsScene()
-        self.checkScene.setSceneRect(0, 0, self.checkBoxGraphics.width(), self.checkBoxGraphics.height())
-        self.checkBoxGraphics.setScene(self.checkScene)
-        self.checkBoxGraphics.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.checkBoxGraphics.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
         self._check_boxes: t.List[QCheckBox] = []
         self._rows: t.List[QGraphicsRectItem] = []
         self.set_resolution(VL53L5CX_Resolution.RESOLUTION_4X4)
         self.set_resolution(VL53L5CX_Resolution.RESOLUTION_8X8)
 
-        #self.scene = QGraphicsScene()
-        #self.graphics.setScene(self.scene)
-        #self._s_update_ui.connect(self._update_ui)
-
-        #self.drawable_drone = DrawableObject2D(0, 0, self.COLOR_DRONE)
-        #self.drawable_environment = [DrawableObject2D(0, 0, self.COLOR_WALL) for x, y in xy_pos_2d] += DrawableObject2D(self.drone.x, self.drone.y, self.COLOR_DRONE)
-
-        self._graph_timer = QTimer()
-        self._graph_timer.setInterval(int(1000 / self.FPS))
-        self._graph_timer.timeout.connect(self._update_graphics)
-        self._graph_timer.start()
+        self._graph_timer = utils.start_timer(self._update_graphics, self.FPS)
 
         self.cx = self._view.width / 2
         self.cy = self._view.height / 2
@@ -242,7 +225,7 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
             row = 0
             index = 0
 
-            while row < size:
+            while row <= size:
 
                 if row not in enabled_rows:
                     row += 1
@@ -262,6 +245,7 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
 
         data = [0 for i in range(size)]
         rows = get_rows(enabled_rows)
+
         # Add all data
         for row in rows:
             for col in range(size):
@@ -329,9 +313,6 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
         for row in self._rows:
             self.checkScene.removeItem(row)
 
-        width = self.checkBoxGraphics.width()
-        height = self.checkBoxGraphics.height() / buttons
-
         self._check_boxes = []
         self._rows = []
         for btn in reversed(range(buttons)):
@@ -343,15 +324,10 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
             check.setStyleSheet("QCheckBox::checked"
                                 "{"
                                 "background-color : lightgreen;"
+                                "color: black;"
                                 "}")
             self.checkBoxLayout.addWidget(check)
             self._check_boxes.append(check)
-
-            # Create row
-            #row = QGraphicsRectItem(0, btn*height, width, height)
-            #row.setBrush(QBrush(self.COLOR_ACTIVE))
-            #self._rows.append(row)
-            #self.checkScene.addItem(row)
 
         self._checkbox_change()
 

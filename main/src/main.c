@@ -64,8 +64,8 @@ void app_main(void)
     esp_log_level_set("SLAMDECK API", ESP_LOG_DEBUG);
     //esp_log_level_set("WIFI", ESP_LOG_DEBUG);
     //esp_log_level_set("COM", ESP_LOG_DEBUG);
-    //esp_log_level_set("UART", ESP_LOG_DEBUG);
-    //esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
+    esp_log_level_set("UART", ESP_LOG_DEBUG);
+    esp_log_level_set("ROUTER", ESP_LOG_DEBUG);
     esp_log_level_set("Platform", ESP_LOG_DEBUG);
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
@@ -77,20 +77,12 @@ void app_main(void)
 
     uint32_t t0 = get_current_time();
 
+    // Led init
     led_init();
+    led_set_state(LED_RED, LED_STATE_ON);
+
     io_init();
     i2c_init();
-
-    /*
-    gpio_set_level(SLAMDECK_GPIO_LED_BLUE, 1);
-    while (1) {
-        vTaskDelay(portMAX_DELAY);
-    }
-    */
-
-    led_set_state(LED_RED, LED_STATE_BLINK_1_HZ);
-
-    // TODO: FIX DEFUALT SETTINGS
 
 
     // Initialize esp APP transport before "com"
@@ -98,7 +90,7 @@ void app_main(void)
     #ifndef DISABLED_WIFI_API
         uart_transport_init();
         com_init();
-        wifi_init();
+        //wifi_init();
         router_init();
         //wifi_connect();
     #endif
@@ -110,4 +102,5 @@ void app_main(void)
     uint32_t t1 = get_current_time() - t0;
     ESP_LOGI(TAG, "Boot time: %d", t1 - t0);
 
+    led_set_state(LED_GREEN, LED_STATE_ON);
 }
