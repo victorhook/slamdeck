@@ -1,5 +1,3 @@
-import PyQt5.QtCore
-
 from PyQt5.QtCore import QTimer
 
 

@@ -1,9 +1,7 @@
-from PyQt5.QtCore import pyqtSignal, QPointF, QSizeF, QRectF, QObject, QTimer, QThread
-from PyQt5.QtWidgets import (QMessageBox, QWidget, QGraphicsScene, QGraphicsView,
-                            QGraphicsTextItem, QGraphicsRectItem, QComboBox,
-                            QLabel, QLineEdit, QPushButton, QPlainTextEdit,
-                            QTabWidget, QOpenGLWidget, QFrame, QVBoxLayout)
-from PyQt5.QtGui import QPen, QColor, qRgb, QTextBlock, QBrush, QImage
+from PyQt5.QtCore import pyqtSignal, QRectF, QObject, QTimer
+from PyQt5.QtWidgets import (QGraphicsScene, QGraphicsView,
+                            QGraphicsTextItem, QGraphicsRectItem)
+from PyQt5.QtGui import QColor, QBrush
 
 from enum import IntEnum
 from matplotlib.colors import LinearSegmentedColormap, rgb2hex

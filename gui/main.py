@@ -6,12 +6,15 @@ from pathlib import Path
 
 from PyQt5 import QtWidgets
 from PyQt5 import uic
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtGui import QIcon
+import qdarkstyle
+
 
 # Cflib
 import cflib.crtp  # noqa
 
 # Make python happy so we can import from gui module
-#print()
 sys.path.append(str(Path(__file__).parent.parent))
 from gui.slamdeck_tab import SlamdeckTab
 
@@ -48,16 +51,8 @@ def main():
     app = None
 
     cflib.crtp.init_drivers()
-
-    # Connect ctrl-c (SIGINT) signal
-    #signal.signal(signal.SIGINT, lambda sig, frame: handle_sigint(app))
-
     logging.basicConfig(level=logging.DEBUG)
 
-    from main import MainUI
-    from PyQt5.QtWidgets import QApplication
-    from PyQt5.QtGui import QIcon
-    import qdarkstyle
 
     app = QApplication(sys.argv)
     #app.setStyle("Fusion")

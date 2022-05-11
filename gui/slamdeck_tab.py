@@ -1,31 +1,23 @@
-from dataclasses import dataclass
 import logging
-from enum import IntEnum
-import typing as t
-
-from PyQt5 import uic
-from PyQt5.QtCore import pyqtSignal, QPointF, QSizeF, QRectF, QObject, QTimer, QThread
-from PyQt5.QtWidgets import (QMessageBox, QWidget, QGraphicsScene, QGraphicsView,
-                            QGraphicsTextItem, QGraphicsRectItem, QComboBox,
-                            QLabel, QLineEdit, QPushButton, QPlainTextEdit,
-                            QTabWidget, QOpenGLWidget, QFrame, QVBoxLayout, QRadioButton)
-
 from pathlib import Path
 
-# Gui imports
-from tab import Tab
-#from flight_controller import FlightController
+from PyQt5 import uic
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import (QGraphicsView, QComboBox, QLineEdit, QPushButton,
+                            QTabWidget, QFrame, QVBoxLayout)
 
+
+# Gui imports
 from gui import utils
+from gui.tab import Tab
 from gui.flight_controller import FlightController
 from gui.slamdeck import Slamdeck, SlamdeckSensorId, SlamdeckSettings
-from gui.data_link import DataLinkNrfCRTP, DataLinkSocketTCP, DataLinkType
+from gui.data_link import DataLinkType
 from gui.visualizer_2d_matrix import Visualizer2dMatrix
 from gui.visualizer_2d_point_cloud import Visualizer2dPointCloud
 from gui.visualizer_3d import Visualizer3d
 from gui.models import (VL53L5CX_PowerMode, VL53L5CX_RangingMode,
-                        VL53L5CX_Resolution, VL53L5CX_Status,
-                        VL53L5CX_TargetOrder,
+                        VL53L5CX_Resolution, VL53L5CX_TargetOrder,
                         ModelCrazyflie, ModelVL53L5CX)
 
 logger = logging.getLogger(__name__)
@@ -35,6 +27,10 @@ slamdeck_class = uic.loadUiType(Path(__file__).parent.joinpath('ui/slamdeck_tab.
 
 
 class SlamdeckTab(Tab, slamdeck_class):
+
+    """
+        This class represents the tab for controlling the Slamdeck.
+    """
 
     _s_connecting = pyqtSignal()
     _s_connected = pyqtSignal()

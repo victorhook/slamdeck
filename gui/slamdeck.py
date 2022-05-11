@@ -14,8 +14,7 @@ from threading import Thread
 from gui.data_link import DataLink, DataLinkNrfCRTP, DataLinkSocketTCP, DataLinkType
 from gui.models import ModelVL53L5CX, ModelCrazyflie
 from gui.models import (VL53L5CX_PowerMode, VL53L5CX_RangingMode,
-                        VL53L5CX_Resolution, VL53L5CX_Status,
-                        VL53L5CX_TargetOrder)
+                        VL53L5CX_Resolution, VL53L5CX_TargetOrder)
 from gui import utils
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,6 @@
 from enum import IntEnum
 import logging
-from vispy import scene
 
-import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.positioning.motion_commander import MotionCommander
 
@@ -35,12 +33,6 @@ class FlightController(QtWidgets.QWidget):
 
         self.hoverTimer = utils.start_timer(self.sendHoverCommand, 100)
         self.update_labels = utils.start_timer(self._update_labels, 33)
-        #self.hoverTimer.start()
-
-        #self.canvas.on_key_press = self.on_key_press
-        #self.canvas.on_key_release = self.on_key_release
-
-        #self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self.keyCB = self.updateHover
 

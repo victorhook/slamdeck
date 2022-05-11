@@ -1,21 +1,20 @@
-import enum
 from itertools import chain
 from queue import Queue
-import PyQt5
 from dataclasses import dataclass
 import numpy as np
 import typing as t
 from collections import namedtuple
 
 import PyQt5.QtCore
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsScale, QCheckBox, QSizePolicy, QSpacerItem, QVBoxLayout, QGraphicsView, QGraphicsEllipseItem, QRadioButton
-from PyQt5.QtGui import QPen, QColor, qRgb, QTextBlock, QBrush
-from gui.models import ModelCrazyflie, ModelVL53L5CX, VL53L5CX_Resolution
-from gui import utils
-
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import (QGraphicsRectItem,  QCheckBox, QVBoxLayout,
+                             QGraphicsView, QGraphicsEllipseItem)
+from PyQt5.QtGui import QColor, QBrush
 from vispy import scene
 
+
+from gui.models import ModelCrazyflie, ModelVL53L5CX, VL53L5CX_Resolution
+from gui import utils
 from gui.slamdeck import SlamdeckSensorId
 
 XYPos = namedtuple('XYPos', ['x', 'y'])

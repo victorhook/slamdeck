@@ -1,24 +1,15 @@
-"""
-Shows data for the Loco Positioning system
-"""
-
 from dataclasses import dataclass
 import logging
-from enum import Enum
-from collections import namedtuple
-from re import X
-
-import time
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import math
-from matplotlib.colors import LinearSegmentedColormap, rgb2hex
-from timeit import default_timer as timer
-
-from vispy import scene
-import numpy as np
-
+import time
 import typing as t
-from gui.models import ModelVL53L5CX, ModelCrazyflie
+
+from PyQt5.QtCore import QTimer
+from matplotlib.colors import LinearSegmentedColormap, rgb2hex
+import numpy as np
+from vispy import scene
+
+from gui.models import ModelVL53L5CX
 from gui.slamdeck import SlamdeckSensorId
 
 
