@@ -6,7 +6,7 @@ from threading import Event, Thread
 import time
 from queue import Queue
 
-from slamdeck_python.slamdeck_api import SlamdeckSensor
+from slamdeck_python.slamdeck_api import SlamdeckSensorId
 
 
 class TestBandwidth(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestBandwidth(unittest.TestCase):
 
     def on_change_all(self, attr: str, data):
         #if attr == 'target_order':
-            #print(self.slamdeck.get_sensor_model(SlamdeckSensor.ALL))
+            #print(self.slamdeck.get_sensor_model(SlamdeckSensorId.ALL))
 
         if attr == 'data':
             if self.last_data == 0:
@@ -65,8 +65,8 @@ class TestBandwidth(unittest.TestCase):
                 self.slamdeck.disconnect()
 
 
-    def get_sensor_info(self, sensor: SlamdeckSensor) -> dict:
-        sensor = SlamdeckSensor.ALL
+    def get_sensor_info(self, sensor: SlamdeckSensorId) -> dict:
+        sensor = SlamdeckSensorId.ALL
         #self.slamdeck.get_sharpener_percent(sensor)
         #self.slamdeck.get_i2c_address(sensor)
         #self.slamdeck.get_integration_time_ms(sensor)
@@ -84,7 +84,7 @@ class TestBandwidth(unittest.TestCase):
             pass
 
         print('Connected!')
-        sensor = SlamdeckSensor.BACK
+        sensor = SlamdeckSensorId.BACK
         sensor_model = self.slamdeck.get_sensor_model(sensor)
         sensor_model.subscribe_to_all(self)
 

@@ -6,7 +6,7 @@ from slamdeck_python.slamdeck import Slamdeck, Callback
 from threading import Event, Thread
 import time
 
-from slamdeck_python.slamdeck_api import SlamdeckSensor
+from slamdeck_python.slamdeck_api import SlamdeckSensorId
 
 
 class TestBandwidth(unittest.TestCase):
@@ -44,7 +44,7 @@ class TestBandwidth(unittest.TestCase):
         print(data)
         self.slamdeck.disconnect()
 
-    def get_sensor_info(self, sensor: SlamdeckSensor) -> dict:
+    def get_sensor_info(self, sensor: SlamdeckSensorId) -> dict:
         self.slamdeck.get_data_from_sensor(sensor)
 
     def testBw(self):
@@ -52,7 +52,7 @@ class TestBandwidth(unittest.TestCase):
             pass
 
         print('Connected!')
-        sensor = SlamdeckSensor.BACK
+        sensor = SlamdeckSensorId.BACK
         sensor_model = self.slamdeck.get_sensor_model(sensor)
         self.slamdeck.start_sampling(sensor)
 

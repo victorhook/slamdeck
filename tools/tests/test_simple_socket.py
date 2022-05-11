@@ -6,7 +6,7 @@ from slamdeck_python.slamdeck import Slamdeck, Callback
 from threading import Event, Thread
 import time
 
-from slamdeck_python.slamdeck_api import SlamdeckCommand, SlamdeckSensor, SlamdeckApiPacket
+from slamdeck_python.slamdeck_api import SlamdeckCommand, SlamdeckSensorId, SlamdeckApiPacket
 import socket
 import struct
 
@@ -29,7 +29,7 @@ class TestBandwidth(unittest.TestCase):
     def tttest_socket(self):
         packet = CPX_Packet(
             CPX_Routing(CPX_Target.ESP32, CPX_Target.HOST, CPX_Function.APP),
-            data=SlamdeckApiPacket(SlamdeckCommand.GET_DATA_FROM_SENSOR, SlamdeckSensor.BACK)
+            data=SlamdeckApiPacket(SlamdeckCommand.GET_DATA_FROM_SENSOR, SlamdeckSensorId.BACK)
             )
         self.sock.send(packet.as_bytes())
         size = struct.unpack('H', self.sock.recv(2))[0]

@@ -1,0 +1,18 @@
+WiFi RX         19540692                49
+IDLE            11908625                30
+IDLE            18073219                45
+Slamdeck data r 24389138                61
+Led Task        36736           <1
+tiT             60356           <1
+Slamdeck API    107             <1
+main            67395           <1
+ipc0            377822          <1
+Tmr Svc         17              <1
+WiFi TX         28              <1
+Router from WIF 32              <1
+COM RX          672             <1
+ipc1            412715          1
+Router from ESP 256             <1
+esp_timer       29871           <1
+WiFi CTRL       1967            <1
+Slamdeck        2824980         7
