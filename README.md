@@ -6,10 +6,13 @@ The project was successful and a circuit board was built, that could collect dat
 ---
 
 ## The prototype
-
 The on-board microcontroller is an [ESP32-S3](https://www.espressif.com/en/products/socs/esp32-s3), which is a dual-core SoC developed by Espressif. It supports both WiFi and BLE, and can be programmed directly through USB with the help of its USB Serial/JTAG Controller.
 
+![Slamdeck circuit board](images/deck_finished.jpg)
+
 The solid-state lidar is the [VL53L5CX](https://www.st.com/en/imaging-and-photonics-solutions/vl53l5cx.html) developed by STMicroelectronics. It's a state-of-the art sensor which can measure distances to multiple zones simultaneously, and thus output a 2D matrix of distances. It's configurable to output a matrix of 4x4 or 8x8, and supports a variety of customizable settings such as ranging frequency, number of targets *per* zone, etc.
+
+![Slamdeck circuit board](images/deck_finished_2.jpg)
 
 The following table contains the main components for the protoype:
 
@@ -23,6 +26,9 @@ The following table contains the main components for the protoype:
 | Micro-USB connection | 1 | Used to program the ESP32-S3 |
 | DS28E05R | 1 | 1-Wire EEPROM, used by the Crazyflie to identify the deck |
 Resistors, capacitors & inductors | x | Necessary for the rest of the components to work correctly. |
+
+The schematic for the main PCB board can be found [here](schematics/slamdeck-main.pdf) and the schematic for the "satellite" board (the small PCB with the sensor) can be found [here](schematics/slamdeck-satellite.pdf).
+
 
 ---
 
@@ -51,3 +57,10 @@ The GUI is written in Python with PyQt. To run the GUI it is recommended to firs
 pip install -r requirements.txt.
 gui/main.py
 ```
+
+---
+Below are some images of the 3D visualization in the GUI.
+
+![3D visualization with the deck mounted on the Crazyflie](images/3d_1.png)
+
+![3D visualization with the deck mounted on the Crazyflie](images/3d_2.png)
