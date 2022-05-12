@@ -34,7 +34,7 @@ The schematic for the main PCB board can be found [here](schematics/slamdeck-mai
 
 ## Build Instructions
 
-### Firmware
+### Firmware - ESP32-S3
 The firmware written in C and is built with [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32s3/index.html) as of version 4.4. You can build the firmware through the cli, with a custom install of `ESP-IDF`, or you can use Espressifs VS Code extension. Instructions can be found [here](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/index.html#installation) to set up your build system.
 
 #### Build through CLI
@@ -49,6 +49,34 @@ To flash:
 
 To monitor the UART:
 `idf.py monitor -p (PORT)`
+
+### Firmware - Crazyflie
+The firmware of the Crazyflie had to be extended to support the deck, which was done by a fork of the original firmware. This is added as a submodule `crazyflie-firmware-slamdeck` and can be updated by:
+
+```
+git submodule init
+git submodule update
+```
+
+Then, to build the firmware run:
+
+```
+cd crazyflie-firmware-slamdeck
+make menuconfig
+```
+
+Then, to enable the deck driver, select:
+- Build and debug options `--->` Enabled debug build `[*]`
+- Expansion deck configuration `--->` Force load specified custom deck driver: `bcSLAM`
+
+Then build it:
+
+`make`
+
+Finally, put the Crazyflie in bootloader mode and flash it:
+
+`make cload`
+
 
 ### GUI
 The GUI is written in Python with PyQt. To run the GUI it is recommended to first create a virtual environment. Once this is done it can be installed by the following:

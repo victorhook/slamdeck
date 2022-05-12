@@ -1,0 +1,3 @@
+[submodule "crazyflie-firmware-slamdeck"]
+	path = crazyflie-firmware-slamdeck
+	url = git@github.com:victorhook/crazyflie-firmware-slamdeck.git
