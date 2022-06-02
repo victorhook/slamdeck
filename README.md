@@ -45,13 +45,21 @@ idf.py build
 ```
 
 To flash:
-`idf.py -p (PORT) flash'`
+
+```
+idf.py -p (PORT) flash'
+```
 
 To monitor the UART:
-`idf.py monitor -p (PORT)`
+
+```
+idf.py monitor -p (PORT)
+```
 
 ### Firmware - Crazyflie
-The firmware of the Crazyflie had to be extended to support the deck, which was done by a fork of the original firmware. This is added as a submodule `crazyflie-firmware-slamdeck` and can be updated by:
+The firmware of the Crazyflie had to be extended to support the deck, which was done by a fork of the original firmware. To build and flash the Crazyflie ensure that you have the tools that are required for this, which can be found [here]([here](https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/building-and-flashing/build/)).
+
+The firmware of the Crazyflie is in a submodule: `crazyflie-firmware-slamdeck` and can be updated by:
 
 ```
 git submodule init

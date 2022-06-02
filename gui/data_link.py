@@ -120,11 +120,9 @@ class DataLinkNrfCRTP(DataLink):
         self._is_connected = False
 
     def _connected(self, uri: str) -> None:
-        self.write(b'0')
-        self._write()
         self._is_connected = True
-        if not USE_CPX:
-            Thread(target=self._run, daemon=True).start()
+        #if not USE_CPX:
+        Thread(target=self._run, daemon=True).start()
 
     def _write(self) -> int:
         packet = self._tx.get()
@@ -132,8 +130,9 @@ class DataLinkNrfCRTP(DataLink):
 
     def _run(self) -> None:
         while self._is_connected:
-            self.write(b'1')
             self._write()
+            #self.write(b'1')
+            #self._write()
 
 
 class DataLinkSocketTCP(DataLink):

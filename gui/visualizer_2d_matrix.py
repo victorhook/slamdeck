@@ -69,11 +69,11 @@ class Visualizer2dMatrix(QObject):
 
         for r in range(self.grid_per_row):
             for c in range(self.grid_per_row):
-                grid = self.grids[self.grid_per_row-1-r][c]
+                grid = self.grids[self.grid_per_row-1-r][self.grid_per_row-1-c]
                 value = distances[g]
                 color_value = self._constraint_value(value)
                 grid.rect.setBrush(self.colors[color_value])
-                grid.text.setPlainText(str(color_value))
+                #grid.text.setPlainText(str(color_value))
                 g += 1
 
     def _create_grids(self) -> t.List[t.List['Grid']]:

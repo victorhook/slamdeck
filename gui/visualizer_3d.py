@@ -85,8 +85,7 @@ class Visualizer3d(scene.SceneCanvas):
             face_color=self.COLOR_CRAZYFLIE
         )
 
-        plane_size = 10
-        """
+        plane_size = 50
         scene.visuals.Plane(
             width=plane_size,
             height=plane_size,
@@ -95,7 +94,6 @@ class Visualizer3d(scene.SceneCanvas):
             color=(0.5, 0.5, 0.5, 0.5),
             edge_color="gray",
             parent=self._view.scene)
-        """
         self._cf_lines = self._make_cf_lines(self._view.scene)
         #self._cf_arrow = self.make_cf_arrow(0.5, 0.02, 0.1, 0.1, self._view.scene)
 
@@ -126,10 +124,12 @@ class Visualizer3d(scene.SceneCanvas):
         self.t0 = time.time()
 
     def _get_color(self, distance: float) -> np.array:
-        return self.cmap(distance, alpha=1)
+        return (1, 0, 0, 1)
+        return self.cmap(distance, alpha=1) # Uncomment to use colormap instead of red
+        
 
     def _get_size(self, distance: float) -> float:
-        return 10#distance / 50
+        return 10 # Could have dynamic size here as well, as: distance / 50
 
     def _get_coordinate(self, row: int, col: int, distance: int, rotation_matrix: np.ndarray) -> np.array:
         grid_pad = 1 / self.grid_size
@@ -143,12 +143,6 @@ class Visualizer3d(scene.SceneCanvas):
             grid_pad * ( center - 0.5 - col),
             grid_pad * ( center - 0.5 - row )
         ])
-
-        # Scale to unit vector
-        #unit_vector = grid_vector / np.linalg.norm(grid_vector)
-
-        # Scale to distance
-        #grid_vector = unit_vector * distance
 
         grid_vector = grid_vector * distance
 
@@ -206,7 +200,7 @@ class Visualizer3d(scene.SceneCanvas):
         return np.array(coordinates), np.array(colors), np.array(sizes)
 
     def _out_of_bounds(self, distance) -> bool:
-        return distance >= 2000
+        return distance >= self.MAX_DISTANCE
 
     def _update_graphics(self):
         # Update point cloud
@@ -215,13 +209,9 @@ class Visualizer3d(scene.SceneCanvas):
             self.point_cloud.set_data(pos=coordinates, face_color=colors, size=sizes, edge_color=(0, 0, 0, 0))
 
         # Update Crazyflie
-        self._cf_pos[0] = self._cf.x # - 3
+        self._cf_pos[0] = self._cf.x
         self._cf_pos[1] = self._cf.y
-        #self._cf_pos[2] = self._cf.z + 1
-        #self._cf_pos[0] = 0
-        #self._cf_pos[1] = 0
-        self._cf_pos[2] = 0
-        #self._cf_pos[2] = 0.5
+        self._cf_pos[2] = self._cf.z
         x, y, z = self._create_cf_lines()
         self._cf_lines[0].set_data(x) # x axis
         self._cf_lines[1].set_data(y) # y axis

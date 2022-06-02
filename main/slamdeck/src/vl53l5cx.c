@@ -203,8 +203,8 @@ uint8_t VL53L5CX_collect_data(VL53L5CX_t* sensor)
                     break;
             }
 
-            // TODO: THIS
-            sensor->data_distance_mm[grid] = sensor->result.distance_mm[grid];
+            // If you dont want to filter anything, uncomment this.
+            //sensor->data_distance_mm[grid] = sensor->result.distance_mm[grid];
         }
     }
     return sensor->status;

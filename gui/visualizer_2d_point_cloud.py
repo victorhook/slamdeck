@@ -186,9 +186,8 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
         rows = self._model_sensors[0].get_row_size()
 
         for sensor in self._model_sensors:
-            angle = self._sensor_angles[sensor.id] + self._model_crazyflie.yaw
             data = self._get_sensor_data(sensor, rows)
-            points = self._get_sensor_points(data, rows, angle)
+            points = self._get_sensor_points(data, rows, self._sensor_angles[sensor.id])
             point_data.extend(points)
 
         if self._points_buffer.full():
@@ -254,13 +253,14 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
         data = np.array(data) / len(enabled_rows)
         return data
 
-    def _get_sensor_points(self, row: np.array, size: int, angle: int) -> t.List[t.Tuple[float, float]]:
+    def _get_sensor_points(self, row: np.array, size: int, initial_angle: int) -> t.List[t.Tuple[float, float]]:
         cfx = self.cx + self._model_crazyflie.x
         cfy = self.cy + self._model_crazyflie.y
+        real_angle = initial_angle + self._model_crazyflie.yaw
 
         fov = 45.0
         angle_size = fov / size
-        angle = angle - (fov / 2) + (angle_size / 2)
+        angle = real_angle - (fov / 2) #+ (angle_size / 2)
 
         sign = -1 if self.Y_AXIS_INVERTED else 1
 
@@ -268,16 +268,25 @@ class Visualizer2dPointCloud(scene.SceneCanvas):
 
         # -22.5 -> 22.5
         for distance in row:
-            x = distance*np.cos(np.deg2rad(angle))
-            y = sign*-1*distance*np.sin(np.deg2rad(angle))
+            v = np.array([np.cos(np.deg2rad(angle)), np.sin(np.deg2rad(angle))])
+            #if initial_angle in [90, 270]:
+            #    v[1] = np.sin(np.deg2rad(initial_angle))
+            #else:
+            #    v[0] = np.cos(np.deg2rad(initial_angle))
+
+            v[0] *= distance
+            v[1] *= sign*-1*distance
 
             # Scale down to fit scene
-            x /= 10
-            y /= 10
+            v /= 10
 
             # Translate to cf position
-            x += cfx
-            y += cfy
+            v[0] += cfx
+            v[1] += cfy
+            #x += cfx
+            #y += cfy
+
+            x, y = v[0], v[1]
 
             points.append((x, y))
             angle += angle_size

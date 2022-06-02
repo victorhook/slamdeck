@@ -179,6 +179,7 @@ class Slamdeck:
                 else:
                     print('No data')
             elif action == Action.START_STREAMING:
+                self._dlink.write(b'0')
                 self._is_streaming = True
             elif action == Action.STOP_STREAMING:
                 self._is_streaming = False
